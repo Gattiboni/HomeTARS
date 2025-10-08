@@ -8,4 +8,3 @@ services:
       - ./backend:/app
     env_file:
       - .env
-# (frontend e outros serviços serão adicionados depois)
