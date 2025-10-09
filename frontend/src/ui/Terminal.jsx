@@ -55,11 +55,25 @@ export default function Terminal() {
       }
     };
     handshake();
+
     const onKey = (e) => { if ((e.altKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) setDebug((d) => !d); };
+    const onAutomation = (e) => {
+      const it = e.detail || {};
+      const msg = automationIntentToPhrase(it);
+      if (msg) {
+        pushLog(msg, 'info');
+        // speak short feedback
+        speak(msg, {}).catch(()=>{});
+      }
+    };
+
     window.addEventListener("keydown", onKey);
+    window.addEventListener('tars:automationCommand', onAutomation);
+
     return () => {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener('tars:automationCommand', onAutomation);
       try { wsRef.current && wsRef.current.stop(); } catch (_) {}
       hideThinking();
       try { micRef.current && micRef.current.stop(); } catch (_) {}
@@ -67,6 +81,21 @@ export default function Terminal() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function automationIntentToPhrase(intent) {
+    if (!intent || !intent.action) return null;
+    switch (intent.action) {
+      case 'lights_on': return 'Affirmative. Turning lights on.';
+      case 'lights_off': return 'Understood. Turning lights off.';
+      case 'set_brightness': return `Dimmer set to ${Math.round(intent.value ?? 0)}%.`;
+      case 'dim_lights': return `Dimming lights${intent.value? ' to ' + Math.round(intent.value) + '%' : ''}.`;
+      case 'set_temperature': return `Setting temperature to ${intent.value}°C.`;
+      case 'play_music': return 'Music on.';
+      case 'stop_music': return 'Music paused.';
+      case 'set_volume': return `Volume set to ${Math.round(intent.value ?? 0)}%.`;
+      default: return null;
+    }
+  }
 
   function scheduleRetry() {
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
@@ -118,10 +147,7 @@ export default function Terminal() {
 
   async function onVoiceData(data) {
     const { text, wake, command_text } = data || {};
-    if (voiceMode === 'passive') {
-      if (wake) { setVoiceMode('armed'); audioService.keyClick(0.04, 620); aggRef.current.buf = command_text ? command_text : ''; resetAggTimer(); }
-      return;
-    }
+    if (voiceMode === 'passive') { if (wake) { setVoiceMode('armed'); audioService.keyClick(0.04, 620); aggRef.current.buf = command_text ? command_text : ''; resetAggTimer(); } return; }
     if (wake && command_text) { aggRef.current.buf = (aggRef.current.buf + ' ' + command_text).trim(); } else if (text) { aggRef.current.buf = (aggRef.current.buf + ' ' + text).trim(); }
     resetAggTimer();
   }
@@ -153,28 +179,17 @@ export default function Terminal() {
     const cmdLower = raw.trim().toLowerCase();
     const isLocal = KNOWN.current.has(cmdLower) || /^switch\s+mode\s+(terminal|logs|status|automations)$/.test(cmdLower);
 
-    // Local switch mode command
     const sm = cmdLower.match(/^switch\s+mode\s+(terminal|logs|status|automations)$/);
-    if (sm) {
-      dispatchIntent({ action: 'switch_mode', target: sm[1] });
-      pushLog(`SWITCHING MODE → ${sm[1].toUpperCase()}`, 'info');
-      return;
-    }
+    if (sm) { dispatchIntent({ action: 'switch_mode', target: sm[1] }); pushLog(`SWITCHING MODE → ${sm[1].toUpperCase()}`, 'info'); return; }
 
-    if (cmdLower === "clear") {
-      try { const t0 = performance.now(); await api.command(raw.trim()); const t1 = performance.now(); setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) })); } catch (e) {}
-      setLogs([]); return;
-    }
+    if (cmdLower === "clear") { try { const t0 = performance.now(); await api.command(raw.trim()); const t1 = performance.now(); setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) })); } catch (e) {} setLogs([]); return; }
 
     let wasError = false;
     try {
       const t0 = performance.now(); const res = await api.command(raw.trim()); const t1 = performance.now(); setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) })); wasError = res?.level === "error";
-      if (!wsActive && !wasError) {
-        const lines = Array.isArray(res?.lines) ? res.lines : []; const level = res?.level === "error" ? "error" : "system"; let delay = 0; lines.forEach((line) => { delay += 120; setTimeout(() => pushLog(line, level), delay); });
-      }
+      if (!wsActive && !wasError) { const lines = Array.isArray(res?.lines) ? res.lines : []; const level = res?.level === "error" ? "error" : "system"; let delay = 0; lines.forEach((line) => { delay += 120; setTimeout(() => pushLog(line, level), delay); }); }
     } catch (e) { pushLogOnce("CORE LINK LOST", "error"); setOnline(false); scheduleRetry(); return; }
 
-    // AI path
     const modeCtx = detectAutomationMode(raw) ? { mode: 'automation' } : undefined;
     showThinking();
     try {
@@ -190,14 +205,10 @@ export default function Terminal() {
     <div className="terminal-wrap app-root" onClick={() => audioService.ensureContext?.() }>
       <header className="terminal-header">TARS SYSTEM ONLINE</header>
       <section className="terminal-panel" aria-label="terminal">
-        <div id="logs" ref={logsRef} className={`logs ${flash ? 'logs-flash' : ''}`} role="log" aria-live="polite">
-          {logs.map((l) => (<div key={l.id} className={`log-line ${l.type}`}>{l.text}</div>))}
-        </div>
+        <div id="logs" ref={logsRef} className={`logs ${flash ? 'logs-flash' : ''}`} role="log" aria-live="polite">{logs.map((l) => (<div key={l.id} className={`log-line ${l.type}`}>{l.text}</div>))}</div>
         <div className="input-row">
           <span className="prompt">&gt;</span>
-          <div className="command-input-wrap">
-            <input id="command-input" className="command-input placeholder-dim" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown} placeholder="type your command..." autoFocus autoComplete="off" spellCheck={false} aria-label="command input" />
-          </div>
+          <div className="command-input-wrap"><input id="command-input" className="command-input placeholder-dim" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown} placeholder="type your command..." autoFocus autoComplete="off" spellCheck={false} aria-label="command input" /></div>
           <div className={`mic-indicator ${micState === 'active' ? 'on' : micState === 'denied' ? 'denied' : ''}`} title={micState}><Mic size={14} /></div>
           <div className={`badge ${voiceMode === 'passive' ? 'badge-listening' : 'badge-ready'}`}>{voiceMode === 'passive' ? 'LISTENING' : 'READY'}</div>
         </div>
