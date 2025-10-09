@@ -275,9 +275,13 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Phase 5 voice + wake word testing completed"
+    - "Automations Panel UI Controls (Phase 6)"
+    - "Natural Language Intent Processing (Phase 6)"
+    - "Automation State Persistence (Phase 6)"
+    - "Terminal Mode Switching (Phase 6)"
+    - "AI Automation Context Integration (Phase 6)"
   stuck_tasks: []
-  test_all: true
+  test_all: false
   test_priority: "high_first"
 
 agent_communication:
