@@ -12,6 +12,7 @@ from datetime import datetime
 from difflib import get_close_matches
 import requests
 import base64
+import re
 
 from repository import BaseRepository, MongoRepository, SupabaseRepository
 from ws_manager import manager
@@ -87,6 +88,8 @@ class AIResponse(BaseModel):
 class TranscribeResponse(BaseModel):
     text: str
     language: Optional[str] = None
+    wake: bool = False
+    command_text: Optional[str] = None
 
 class TTSResponse(BaseModel):
     audio_base64: str
@@ -207,6 +210,24 @@ def _call_openai_tts(text: str, voice: str = 'alloy', fmt: str = 'mp3') -> bytes
     return r.content
 
 
+# Wake word detection
+WAKE_PATTERNS = [
+    re.compile(r"\bhey\s*[-,;:]?\s*tars\b", re.IGNORECASE),
+    re.compile(r"\bei\s*[-,;:]?\s*tars\b", re.IGNORECASE),  # pt-BR 'Ei Tars'
+]
+
+def _detect_wake(text: str) -> (bool, Optional[str]):
+    if not text:
+        return False, None
+    for pat in WAKE_PATTERNS:
+        m = pat.search(text)
+        if m:
+            # Command is whatever comes after the matched phrase
+            after = text[m.end():].strip(" \t-.,;:!?")
+            return True, after or None
+    return False, None
+
+
 # ----------------------------
 # Routes
 # ----------------------------
@@ -314,12 +335,14 @@ async def voice_transcribe(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"transcribe error: {e}")
 
+    wake, command_text = _detect_wake(text)
+
     # Log the transcribed user input as a 'user' entry (voice)
     if text:
         u = await repo.write_log("user", f"> (voice) {text}")
         await manager.broadcast_json({"type": "log", "item": {"id": u.id, "ts": u.ts, "level": u.level, "text": u.text}})
 
-    return TranscribeResponse(text=text, language=lang)
+    return TranscribeResponse(text=text, language=lang, wake=wake, command_text=command_text)
 
 
 @api_router.post("/voice/tts", response_model=TTSResponse)

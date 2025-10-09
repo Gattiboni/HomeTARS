@@ -1,6 +1,6 @@
-// Phase 5 Voice utilities: mic capture → Whisper → AI → TTS
-// Uses MediaRecorder for continuous segments and backend endpoints:
-//   POST /api/voice/transcribe (multipart file)
+// Phase 5 Voice utilities with wake word
+// Endpoints:
+//   POST /api/voice/transcribe (multipart file) -> { text, language, wake, command_text }
 //   POST /api/ai { prompt }
 //   POST /api/voice/tts (form: text, voice, fmt)
 
@@ -17,7 +17,7 @@ export function startMic({ onTranscript, onError, onState }) {
       onState && onState('active');
       rec = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       rec.ondataavailable = async (e) => {
-        if (!e.data || e.data.size < 1024) return; // ignore tiny chunks
+        if (!e.data || e.data.size < 1024) return;
         const fd = new FormData();
         const file = new File([e.data], 'clip.webm', { type: 'audio/webm' });
         fd.append('file', file);
@@ -25,7 +25,7 @@ export function startMic({ onTranscript, onError, onState }) {
           const res = await fetch(`${API}/voice/transcribe`, { method: 'POST', body: fd });
           if (!res.ok) throw new Error(`transcribe ${res.status}`);
           const data = await res.json();
-          if (data?.text) onTranscript && onTranscript(data.text);
+          onTranscript && onTranscript(data);
         } catch (err) {
           onError && onError(err);
         }

@@ -17,6 +17,7 @@ export default function Terminal() {
   const [debug, setDebug] = useState(false);
   const [metrics, setMetrics] = useState({ lastHttpMs: null, lastWsAt: null, wsCount: 0, lastAiMs: null });
   const [micState, setMicState] = useState('idle'); // idle|active|denied|stopped
+  const [voiceMode, setVoiceMode] = useState('passive'); // passive|armed
 
   const logsRef = useRef(null);
   const bootRanRef = useRef(false);
@@ -26,6 +27,7 @@ export default function Terminal() {
   const seenIdsRef = useRef(new Set());
   const thinkingRef = useRef({ id: null, timer: null, phase: 0 });
   const micRef = useRef(null);
+  const aggRef = useRef({ buf: '', timer: null });
 
   const KNOWN = useRef(new Set(["help", "status", "time", "clear"]))
 
@@ -50,7 +52,7 @@ export default function Terminal() {
         startRealtime();
         // Start microphone listening once online
         micRef.current = startMic({
-          onTranscript: onVoiceTranscript,
+          onTranscript: onVoiceData,
           onError: () => {},
           onState: setMicState,
         });
@@ -76,6 +78,7 @@ export default function Terminal() {
       try { wsRef.current && wsRef.current.stop(); } catch (_) {}
       hideThinking();
       try { micRef.current && micRef.current.stop(); } catch (_) {}
+      clearAggTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -93,12 +96,19 @@ export default function Terminal() {
         runBootSequenceOnce();
         setBooting(false);
         startRealtime();
-        micRef.current = startMic({ onTranscript: onVoiceTranscript, onError: () => {}, onState: setMicState });
+        micRef.current = startMic({ onTranscript: onVoiceData, onError: () => {}, onState: setMicState });
       } catch (e) {
         setOnline(false);
         scheduleRetry();
       }
     }, 3000);
+  }
+
+  function clearAggTimer() {
+    if (aggRef.current.timer) {
+      clearTimeout(aggRef.current.timer);
+      aggRef.current.timer = null;
+    }
   }
 
   async function fetchInitialLogs() {
@@ -193,30 +203,58 @@ export default function Terminal() {
     thinkingRef.current = { id: null, timer: null, phase: 0 };
   }
 
-  async function onVoiceTranscript(text) {
-    // Show as user, then get AI response and speak it
-    setLogs((prev) => [...prev, { id: crypto.randomUUID(), text: `> (voice) ${text}`, type: "user" }]);
-    showThinking();
-    try {
-      const t0 = performance.now();
-      const ai = await api.ai(text);
-      const t1 = performance.now();
-      hideThinking();
-      setMetrics((m) => ({ ...m, lastAiMs: Math.round(t1 - t0) }));
-
-      if (!wsActive) {
-        const lines = Array.isArray(ai?.lines) ? ai.lines : [];
-        lines.forEach((line, idx) => setTimeout(() => pushLog(line, ai?.level || 'info'), 120 * (idx + 1)));
-      }
-
-      // TTS: speak concatenated lines
-      const speakText = (ai?.lines || []).join(". ");
-      if (speakText) {
-        await speak(speakText, {});
-      }
-    } catch (e) {
-      hideThinking();
+  // Voice pipeline with wake word
+  async function onVoiceData(data) {
+    const { text, wake, command_text } = data || {};
+    if (text) {
+      // Already logged by backend; we can add minimal UI signals if needed
     }
+    if (voiceMode === 'passive') {
+      if (wake) {
+        setVoiceMode('armed');
+        audioService.keyClick(0.04, 620); // confirmation beep
+        aggRef.current.buf = command_text ? command_text : '';
+        resetAggTimer();
+      }
+      return;
+    }
+    // armed mode
+    if (wake && command_text) {
+      // If wake repeats, treat trailing text as additional buffer
+      aggRef.current.buf = (aggRef.current.buf + ' ' + command_text).trim();
+    } else if (text) {
+      // accumulate any recognized text when armed
+      aggRef.current.buf = (aggRef.current.buf + ' ' + text).trim();
+    }
+    resetAggTimer();
+  }
+
+  function resetAggTimer() {
+    clearAggTimer();
+    aggRef.current.timer = setTimeout(async () => {
+      const finalText = (aggRef.current.buf || '').trim();
+      aggRef.current.buf = '';
+      if (!finalText) return;
+      showThinking();
+      try {
+        const t0 = performance.now();
+        const ai = await api.ai(finalText);
+        const t1 = performance.now();
+        hideThinking();
+        setMetrics((m) => ({ ...m, lastAiMs: Math.round(t1 - t0) }));
+
+        if (!wsActive) {
+          const lines = Array.isArray(ai?.lines) ? ai.lines : [];
+          lines.forEach((line, idx) => setTimeout(() => pushLog(line, ai?.level || 'info'), 120 * (idx + 1)));
+        }
+        const speakText = (ai?.lines || []).join('. ');
+        if (speakText) await speak(speakText, {});
+      } catch (e) {
+        hideThinking();
+      } finally {
+        setVoiceMode('passive');
+      }
+    }, 1500); // finalize after pause
   }
 
   async function handleEnter() {
@@ -341,7 +379,14 @@ export default function Terminal() {
           <div className={`mic-indicator ${micState === 'active' ? 'on' : micState === 'denied' ? 'denied' : ''}`} title={micState}>
             <Mic size={14} />
           </div>
+          <div className={`badge ${voiceMode === 'passive' ? 'badge-listening' : 'badge-ready'}`}>
+            {voiceMode === 'passive' ? 'LISTENING' : 'READY'}
+          </div>
         </div>
+
+        {voiceMode === 'passive' && (
+          <div className="hint-line">aguardando ‘Hey Tars’…</div>
+        )}
 
         {debug && (
           <div className="debug-panel">
