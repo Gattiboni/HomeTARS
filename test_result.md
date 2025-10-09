@@ -212,6 +212,61 @@ frontend:
       - working: true
         agent: "testing"
         comment: "✅ VERIFIED: WebSocket functionality stable. Single boot sequence after reload confirmed. Real-time communication working, fallback to HTTP functional when needed."
+  - task: "Automations Panel UI Controls (Phase 6)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/ui/dashboard/AutomationsPanel.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Phase 6 automations panel implemented with lights (on/off, brightness), thermostat (temperature), and music (on/off, volume) controls. State persistence via localStorage. Needs testing."
+  - task: "Natural Language Intent Processing (Phase 6)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/core/intent.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Intent parsing and heuristic fallback implemented. Supports automation commands like 'kill all lights', 'set temperature to 26', 'play music', 'volume 45'. Needs testing."
+  - task: "Automation State Persistence (Phase 6)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/ui/dashboard/AutomationsPanel.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Automation state stored in localStorage with key 'tars_automations'. Should persist across page reloads. Needs testing."
+  - task: "Terminal Mode Switching (Phase 6)"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/ui/Terminal.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Terminal supports 'switch mode automations' command to navigate to automations panel. Mode switching via custom events. Needs testing."
+  - task: "AI Automation Context Integration (Phase 6)"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Backend AI endpoint supports automation context mode. INTENT_INSTRUCTIONS added to system prompt for automation commands. Returns structured intent responses. Needs testing."
 metadata:
   created_by: "main_agent"
   version: "1.0"
