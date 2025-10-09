@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime
 
 from repository import BaseRepository, MongoRepository, SupabaseRepository
+from ws_manager import manager
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -29,7 +30,7 @@ repo: BaseRepository
 if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
     try:
         repo = SupabaseRepository(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-        logging.info("SupabaseRepository configured (off-by-default now active due to env).")
+        logging.info("SupabaseRepository configured (active due to env).")
     except Exception as e:
         logging.warning(f"SupabaseRepository init failed: {e}. Falling back to MongoRepository.")
         repo = MongoRepository(db)
@@ -74,7 +75,7 @@ class CommandResponse(BaseModel):
 # ----------------------------
 
 def _known_command_lines(cmd: str) -> (List[str], str):
-    cmd_l = cmd.strip().toLowerCase() if hasattr(cmd, 'toLowerCase') else cmd.strip().lower()
+    cmd_l = cmd.strip().lower()
     if cmd_l == "help":
         return ([
             "AVAILABLE COMMANDS:",
@@ -130,23 +131,41 @@ async def post_command(payload: CommandRequest):
     if not cmd:
         raise HTTPException(status_code=400, detail="command is required")
 
-    # store user echo log
-    await repo.write_log("user", f"> {cmd}")
+    # store user echo log and broadcast
+    user_log = await repo.write_log("user", f"> {cmd}")
+    await manager.broadcast_json({"type": "log", "item": {
+        "id": user_log.id, "ts": user_log.ts, "level": user_log.level, "text": user_log.text
+    }})
 
     lines, level = _known_command_lines(cmd)
 
-    # side-effect: write response lines (except clear)
+    # side-effect: write response lines (except clear) and broadcast
     if cmd.lower() != "clear":
         for ln in lines:
-            await repo.write_log("error" if level == "error" else "system", ln)
+            li = await repo.write_log("error" if level == "error" else "system", ln)
+            await manager.broadcast_json({"type": "log", "item": {
+                "id": li.id, "ts": li.ts, "level": li.level, "text": li.text
+            }})
 
-    # record command
+    # record command (non-blocking)
     try:
         await repo.record_command(cmd, level, lines)
     except Exception:
-        pass  # non-blocking
+        pass
 
     return CommandResponse(echo=cmd, lines=lines, level=level, wrote_log=True)
+
+
+# WebSocket for real-time events
+@api_router.websocket("/events/ws")
+async def events_ws(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep the connection alive; we don't require client messages yet
+            await websocket.receive_text()
+    except Exception:
+        await manager.disconnect(websocket)
 
 
 # Include the router in the main app

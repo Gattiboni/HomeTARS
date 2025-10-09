@@ -3,16 +3,24 @@ import "../styles/terminal.css";
 import { BOOT_SEQUENCE } from "../core/mock";
 import { audioService } from "../core/sound";
 import { api } from "../core/api";
+import { createRealtime } from "../core/ws";
 
 export default function Terminal() {
   const [logs, setLogs] = useState([]);
   const [input, setInput] = useState("");
   const [online, setOnline] = useState(false);
   const [booting, setBooting] = useState(true);
+  const [wsActive, setWsActive] = useState(false);
+  const [flash, setFlash] = useState(false);
+  const [debug, setDebug] = useState(false);
+  const [metrics, setMetrics] = useState({ lastHttpMs: null, lastWsAt: null, wsCount: 0 });
+
   const logsRef = useRef(null);
   const bootRanRef = useRef(false);
   const lastFetchedRef = useRef(null);
   const retryTimerRef = useRef(null);
+  const wsRef = useRef(null);
+  const seenIdsRef = useRef(new Set());
 
   useEffect(() => {
     if (!logsRef.current) return;
@@ -24,14 +32,17 @@ export default function Terminal() {
     pushLogOnce("BOOTING SEQUENCE...", "system");
 
     const handshake = async () => {
+      const t0 = performance.now();
       try {
         const s = await api.status();
+        const t1 = performance.now();
+        setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) }));
         setOnline(true);
-        // fetch initial logs
         await fetchInitialLogs();
-        // run boot sequence only once after online
         runBootSequenceOnce();
         setBooting(false);
+        // start realtime after successful handshake
+        startRealtime();
       } catch (e) {
         setOnline(false);
         pushLogOnce("CORE LINK LOST", "error");
@@ -41,8 +52,17 @@ export default function Terminal() {
 
     handshake();
 
+    const onKey = (e) => {
+      if ((e.altKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) {
+        setDebug((d) => !d);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+
     return () => {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      window.removeEventListener("keydown", onKey);
+      try { wsRef.current && wsRef.current.stop(); } catch (_) {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -51,11 +71,15 @@ export default function Terminal() {
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     retryTimerRef.current = setTimeout(async () => {
       try {
+        const t0 = performance.now();
         const s = await api.status();
+        const t1 = performance.now();
+        setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) }));
         setOnline(true);
         await fetchInitialLogs();
         runBootSequenceOnce();
         setBooting(false);
+        startRealtime();
       } catch (e) {
         setOnline(false);
         scheduleRetry();
@@ -66,19 +90,31 @@ export default function Terminal() {
   async function fetchInitialLogs() {
     try {
       const res = await api.logs({ limit: 100 });
-      // reverse chronological -> we want oldest first on screen
       const items = [...(res.items || [])].reverse();
       const mapped = items.map((doc) => ({ id: doc.id, text: doc.text, type: doc.level }));
       setLogs((prev) => {
-        // avoid duplicating if already printed
         const existing = new Set(prev.map((p) => p.id));
         const merged = [...prev, ...mapped.filter((m) => !existing.has(m.id))];
+        merged.forEach((m) => seenIdsRef.current.add(m.id));
         return merged;
       });
       if (items.length) lastFetchedRef.current = items[items.length - 1].ts;
-    } catch (e) {
-      // ignore; handled by status retry
-    }
+    } catch (e) {}
+  }
+
+  function startRealtime() {
+    if (wsRef.current) return;
+    wsRef.current = createRealtime({
+      onOpen: () => setWsActive(true),
+      onClose: () => setWsActive(false),
+      onError: () => {},
+      onLog: (item) => {
+        setMetrics((m) => ({ ...m, lastWsAt: new Date(), wsCount: (m.wsCount || 0) + 1 }));
+        if (seenIdsRef.current.has(item.id)) return; // de-dup
+        seenIdsRef.current.add(item.id);
+        typeOut(item.text, item.level);
+      },
+    });
   }
 
   function runBootSequenceOnce() {
@@ -86,7 +122,7 @@ export default function Terminal() {
     bootRanRef.current = true;
     let t = 0;
     const timers = [];
-    BOOT_SEQUENCE.forEach((step, idx) => {
+    BOOT_SEQUENCE.forEach((step) => {
       t += step.delay;
       const id = setTimeout(() => pushLog(step.text, "system"), t);
       timers.push(id);
@@ -106,12 +142,33 @@ export default function Terminal() {
     audioService.beep();
   }
 
+  // typing effect for incoming lines
+  function typeOut(text, type) {
+    const id = crypto.randomUUID();
+    const obj = { id, text: "", type: type || "system", __target: text };
+    setLogs((prev) => [...prev, obj]);
+    let i = 0;
+    const iv = setInterval(() => {
+      i += 1;
+      const next = text.slice(0, i);
+      setLogs((prev) => prev.map((l) => (l.id === id ? { ...l, text: next } : l)));
+      if (i >= text.length) clearInterval(iv);
+    }, Math.min(25, Math.max(10, 200 / (text.length || 1))));
+  }
+
   async function handleEnter() {
     const raw = input;
     if (!raw.trim()) return;
 
-    // echo the command locally
-    setLogs((prev) => [...prev, { id: crypto.randomUUID(), text: `> ${raw}`, type: "user" }]);
+    // flash green border to signal command event
+    setFlash(true);
+    setTimeout(() => setFlash(false), 180);
+
+    // Only echo locally if WS is not active (when active, echo tulee via WS almost instantly)
+    if (!wsActive) {
+      setLogs((prev) => [...prev, { id: crypto.randomUUID(), text: `> ${raw}`, type: "user" }]);
+    }
+
     setInput("");
     audioService.keyClick(0.03, 520);
 
@@ -122,24 +179,31 @@ export default function Terminal() {
 
     if (raw.trim().toLowerCase() === "clear") {
       try {
-        // still notify backend for traceability
+        const t0 = performance.now();
         await api.command(raw.trim());
-      } catch (e) {
-        // ignore
-      }
+        const t1 = performance.now();
+        setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) }));
+      } catch (e) {}
       setLogs([]);
       return;
     }
 
     try {
+      const t0 = performance.now();
       const res = await api.command(raw.trim());
-      const lines = Array.isArray(res?.lines) ? res.lines : [];
-      const level = res?.level === "error" ? "error" : "system";
-      let delay = 0;
-      lines.forEach((line) => {
-        delay += 120;
-        setTimeout(() => pushLog(line, level), delay);
-      });
+      const t1 = performance.now();
+      setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) }));
+
+      // If WS is active, rely on real-time stream, else print lines via HTTP result
+      if (!wsActive) {
+        const lines = Array.isArray(res?.lines) ? res.lines : [];
+        const level = res?.level === "error" ? "error" : "system";
+        let delay = 0;
+        lines.forEach((line) => {
+          delay += 120;
+          setTimeout(() => pushLog(line, level), delay);
+        });
+      }
     } catch (e) {
       pushLogOnce("CORE LINK LOST", "error");
       setOnline(false);
@@ -163,7 +227,7 @@ export default function Terminal() {
       <header className="terminal-header">TARS SYSTEM ONLINE</header>
 
       <section className="terminal-panel" aria-label="terminal">
-        <div id="logs" ref={logsRef} className="logs" role="log" aria-live="polite">
+        <div id="logs" ref={logsRef} className={`logs ${flash ? 'logs-flash' : ''}`} role="log" aria-live="polite">
           {logs.map((l) => (
             <div key={l.id} className={`log-line ${l.type}`}>{l.text}</div>
           ))}
@@ -186,6 +250,14 @@ export default function Terminal() {
             />
           </div>
         </div>
+
+        {debug && (
+          <div className="debug-panel">
+            <div>HTTP last: {metrics.lastHttpMs != null ? `${metrics.lastHttpMs} ms` : '—'}</div>
+            <div>WS events: {metrics.wsCount || 0}</div>
+            <div>WS last: {metrics.lastWsAt ? new Date(metrics.lastWsAt).toLocaleTimeString() : '—'}</div>
+          </div>
+        )}
       </section>
     </div>
   );
