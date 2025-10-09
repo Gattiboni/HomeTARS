@@ -6,6 +6,7 @@ import { api } from "../core/api";
 import { createRealtime } from "../core/ws";
 import { startMic, speak } from "../core/voice";
 import { detectAutomationMode, parseIntentsFromLines, inferIntentHeuristic, dispatchIntent } from "../core/intent";
+import { getActiveGptSession, setActiveGptSession } from "../core/gpt";
 import { getFlags } from "../core/flags";
 import { Mic } from "lucide-react";
 
@@ -128,6 +129,14 @@ export default function Terminal() {
       if (!finalText) return;
       showThinking();
       try {
+        const isGptHint = /\b(gpt|conversation|help|assist|connect)\b/i.test(finalText);
+        if (isGptHint && !getActiveGptSession()) {
+          // Offer and open GPT link session in economy with mock
+          const s = await api.gpt.session();
+          setActiveGptSession(s.session_id);
+          dispatchIntent({ action: 'switch_mode', target: 'gpt' });
+          pushLog(`GPT LINK OPENED: ${s.session_id}`, 'info');
+        }
         const mode = detectAutomationMode(finalText) ? { mode: 'automation' } : undefined;
         const t0 = performance.now(); const ai = await api.ai(finalText, undefined, mode); const t1 = performance.now(); hideThinking(); setMetrics((m) => ({ ...m, lastAiMs: Math.round(t1 - t0) }));
         if (!wsActive) { const lines = Array.isArray(ai?.lines) ? ai.lines : []; lines.forEach((line, idx) => setTimeout(() => pushLog(line, ai?.level || 'info'), 120 * (idx + 1))); }
