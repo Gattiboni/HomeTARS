@@ -107,45 +107,57 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Added SystemStatus model, ensure_status_initialized, and /api/status route (MongoDB)."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Status command integration working correctly. Backend responds with 'SYSTEM STATUS: ONLINE / CORE STABLE'. API endpoint functional."
   - task: "Implement GET /api/logs"
     implemented: true
     working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Added LogsResponse model, pagination/filter params (limit, since, level), returns items sorted by ts desc."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Logs endpoint working correctly. Initial logs fetched successfully during boot sequence. Pagination and sorting functional."
   - task: "Implement POST /api/command"
     implemented: true
     working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Stores user command log and system/error response logs; returns structured response. Known cmds: help/status/time/clear."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: All commands working correctly. Status, time, clear, and unknown command handling all functional. Error responses properly styled."
 frontend:
   - task: "API client and terminal integration"
     implemented: true
-    working: true
+    working: false
     file: "/app/frontend/src/ui/Terminal.jsx"
-    stuck_count: 0
+    stuck_count: 1
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Added src/core/api.js using REACT_APP_BACKEND_URL; loader 'BOOTING SEQUENCE…', 'CORE LINK LOST' handling; commands wired to POST /api/command; initial logs via GET /api/logs."
+      - working: false
+        agent: "testing"
+        comment: "❌ CRITICAL ISSUE: Boot sequence shows duplicate 'BOOTING SEQUENCE...' lines (found 2 instances, expected 1). This violates the clean boot requirement. All other functionality working correctly - commands, API integration, error handling, resilience all pass. Need to fix duplicate boot sequence initialization."
 metadata:
   created_by: "main_agent"
   version: "1.0"
