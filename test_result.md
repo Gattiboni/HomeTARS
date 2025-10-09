@@ -99,7 +99,7 @@
 
 
 #====================================================================================================
-user_problem_statement: "Phase 5 Voice + Wake Word E2E Testing — Test voice UI components, wake word detection interface, unknown command suggestions, known commands, WebSocket fallback, and API endpoints functionality."
+user_problem_statement: "Phase 6 Intents/Automations E2E Testing — Test automation panel UI controls, natural language intent processing, state persistence, and multimodal command integration."
 backend:
   - task: "Voice Transcription API (Phase 5)"
     implemented: true
