@@ -99,5 +99,71 @@
 
 
 #====================================================================================================
+user_problem_statement: "Implement Phase 2 — Backend communication: GET /api/status, GET /api/logs, POST /api/command; integrate frontend; loader and error handling."
+backend:
+  - task: "Implement GET /api/status"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added SystemStatus model, ensure_status_initialized, and /api/status route (MongoDB)."
+  - task: "Implement GET /api/logs"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added LogsResponse model, pagination/filter params (limit, since, level), returns items sorted by ts desc."
+  - task: "Implement POST /api/command"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Stores user command log and system/error response logs; returns structured response. Known cmds: help/status/time/clear."
+frontend:
+  - task: "API client and terminal integration"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/ui/Terminal.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Added src/core/api.js using REACT_APP_BACKEND_URL; loader 'BOOTING SEQUENCE…', 'CORE LINK LOST' handling; commands wired to POST /api/command; initial logs via GET /api/logs."
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Verify backend endpoints behavior with edge cases (invalid since, limit bounds, unknown command)."
+    - "Frontend integration happy path: status, time, help, clear; offline handling."
+  stuck_tasks:
+    - "None"
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "Phase 2 implemented; ready for automated frontend testing if user approves. Backend appears healthy; minor console WS errors stem from external scripts and are unrelated."
+
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
