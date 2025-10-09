@@ -30,7 +30,7 @@ class SystemStatusDTO(BaseModel):
 class LogItemDTO(BaseModel):
     id: str
     ts: datetime
-    level: Literal["system", "user", "error"]
+    level: Literal["system", "user", "error", "info"]
     text: str
 
 
