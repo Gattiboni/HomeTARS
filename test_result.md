@@ -187,13 +187,10 @@ metadata:
   run_ui: true
 
 test_plan:
-  - agent: "user"
-    message: "User approved automated frontend testing. Requested storage migration to Supabase; not applied due to platform constraint (Mongo-only). Proceeding with tests on current Mongo-backed implementation."
-
   current_focus:
-    - "All tasks completed and verified"
+    - "Phase 4 comprehensive testing completed"
   stuck_tasks: []
-  test_all: false
+  test_all: true
   test_priority: "high_first"
 
 agent_communication:
