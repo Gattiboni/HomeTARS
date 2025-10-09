@@ -287,6 +287,8 @@ test_plan:
 agent_communication:
   - agent: "testing"
     message: "✅ PHASE 5 VOICE + WAKE WORD E2E TESTING COMPLETED: 10/10 tests passed! Fixed ESLint configuration conflict by removing conflicting .eslintrc.js file. All Phase 5 features verified: ✅ Voice UI components (passive state hint, LISTENING badge, mic indicator), ✅ Wake word detection interface implemented, ✅ Voice API endpoints functional (/api/voice/transcribe, /api/voice/tts), ✅ AI suggestions working ('statuz' → 'DID YOU MEAN: status?'), ✅ Known commands (help/status/time/clear), ✅ WebSocket stability (single boot sequence, real-time communication), ✅ API integration tested. Note: Actual voice capture cannot be tested in headless browser but all UI components and API endpoints are functional. Application is production-ready for Phase 5 voice features."
+  - agent: "testing"
+    message: "🚀 STARTING PHASE 6 INTENTS/AUTOMATIONS E2E TESTING: Testing automation panel UI controls, natural language intent processing, state persistence, terminal mode switching, and AI automation context integration. Will verify: 1) Automations panel controls (lights, brightness, temperature, music, volume), 2) Natural language commands ('kill all lights', 'set temperature to 26', 'play music', 'volume 45'), 3) State persistence across reloads, 4) Terminal mode switching ('switch mode automations'), 5) AI intent parsing and feedback logs."
 
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
