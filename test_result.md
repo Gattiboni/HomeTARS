@@ -153,6 +153,9 @@ metadata:
   run_ui: false
 
 test_plan:
+  - agent: "user"
+    message: "User approved automated frontend testing. Requested storage migration to Supabase; not applied due to platform constraint (Mongo-only). Proceeding with tests on current Mongo-backed implementation."
+
   current_focus:
     - "Verify backend endpoints behavior with edge cases (invalid since, limit bounds, unknown command)."
     - "Frontend integration happy path: status, time, help, clear; offline handling."
