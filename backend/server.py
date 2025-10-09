@@ -10,16 +10,33 @@ from typing import List, Optional, Literal
 import uuid
 from datetime import datetime
 
+from repository import BaseRepository, MongoRepository, SupabaseRepository
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
+# MongoDB connection (default active storage)
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
+# Optional Supabase configuration (off by default)
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+
+# Select repository implementation
+repo: BaseRepository
+if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+    try:
+        repo = SupabaseRepository(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        logging.info("SupabaseRepository configured (off-by-default now active due to env).")
+    except Exception as e:
+        logging.warning(f"SupabaseRepository init failed: {e}. Falling back to MongoRepository.")
+        repo = MongoRepository(db)
+else:
+    repo = MongoRepository(db)
+
+# Create the main app
 app = FastAPI()
 
 # Create a router with the /api prefix
@@ -53,37 +70,11 @@ class CommandResponse(BaseModel):
 
 
 # ----------------------------
-# Utilities
+# Helpers
 # ----------------------------
-async def ensure_status_initialized():
-    existing = await db.system_status.find_one({"_id": "singleton"})
-    if not existing:
-        await db.system_status.insert_one({
-            "_id": "singleton",
-            "status": "ONLINE",
-            "updated_at": datetime.utcnow(),
-        })
-
-async def read_status() -> SystemStatus:
-    doc = await db.system_status.find_one({"_id": "singleton"})
-    if not doc:
-        await ensure_status_initialized()
-        doc = await db.system_status.find_one({"_id": "singleton"})
-    return SystemStatus(status=doc.get("status", "ONLINE"), updated_at=doc.get("updated_at", datetime.utcnow()))
-
-async def write_log(level: str, text: str, ts: Optional[datetime] = None) -> LogItem:
-    obj = LogItem(level=level, text=text, ts=ts or datetime.utcnow())
-    await db.logs.insert_one({
-        "_id": obj.id,
-        "ts": obj.ts,
-        "level": obj.level,
-        "text": obj.text,
-    })
-    return obj
-
 
 def _known_command_lines(cmd: str) -> (List[str], str):
-    cmd_l = cmd.strip().lower()
+    cmd_l = cmd.strip().toLowerCase() if hasattr(cmd, 'toLowerCase') else cmd.strip().lower()
     if cmd_l == "help":
         return ([
             "AVAILABLE COMMANDS:",
@@ -98,7 +89,6 @@ def _known_command_lines(cmd: str) -> (List[str], str):
         now = datetime.utcnow().strftime('%H:%M:%S UTC')
         return ([f"SYSTEM TIME: {now}"], "system")
     if cmd_l == "clear":
-        # UI handles clearing; no lines
         return ([], "system")
     return (["COMMAND NOT RECOGNIZED."], "error")
 
@@ -113,8 +103,9 @@ async def root():
 
 @api_router.get("/status", response_model=SystemStatus)
 async def get_status():
-    await ensure_status_initialized()
-    return await read_status()
+    await repo.ensure_status_initialized()
+    s = await repo.read_status()
+    return SystemStatus(status=s.status, updated_at=s.updated_at)
 
 
 @api_router.get("/logs", response_model=LogsResponse)
@@ -123,20 +114,14 @@ async def get_logs(
     since: Optional[str] = Query(None),
     level: Optional[str] = Query(None),
 ):
-    q = {}
+    since_dt = None
     if since:
         try:
             since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
-            q["ts"] = {"$gt": since_dt}
         except Exception:
             raise HTTPException(status_code=400, detail="invalid 'since' format")
-    if level in {"system", "user", "error"}:
-        q["level"] = level
-
-    cursor = db.logs.find(q).sort("ts", -1).limit(limit)
-    docs = await cursor.to_list(length=limit)
-    items = [LogItem(id=str(doc.get("_id")), ts=doc["ts"], level=doc["level"], text=doc["text"]) for doc in docs]
-    return LogsResponse(items=items)
+    items = await repo.get_logs(limit=limit, since=since_dt, level=level)
+    return LogsResponse(items=[LogItem(id=i.id, ts=i.ts, level=i.level, text=i.text) for i in items])
 
 
 @api_router.post("/command", response_model=CommandResponse)
@@ -145,15 +130,21 @@ async def post_command(payload: CommandRequest):
     if not cmd:
         raise HTTPException(status_code=400, detail="command is required")
 
-    # store user command as a log
-    await write_log("user", f"> {cmd}")
+    # store user echo log
+    await repo.write_log("user", f"> {cmd}")
 
     lines, level = _known_command_lines(cmd)
 
-    # side-effect: store system/error logs for the lines, except for 'clear'
+    # side-effect: write response lines (except clear)
     if cmd.lower() != "clear":
         for ln in lines:
-            await write_log("error" if level == "error" else "system", ln)
+            await repo.write_log("error" if level == "error" else "system", ln)
+
+    # record command
+    try:
+        await repo.record_command(cmd, level, lines)
+    except Exception:
+        pass  # non-blocking
 
     return CommandResponse(echo=cmd, lines=lines, level=level, wrote_log=True)
 
@@ -178,8 +169,11 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def on_startup():
-    await ensure_status_initialized()
+    await repo.ensure_status_initialized()
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    try:
+        await repo.close()
+    finally:
+        client.close()
