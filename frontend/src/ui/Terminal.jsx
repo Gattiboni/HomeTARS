@@ -20,8 +20,8 @@ export default function Terminal() {
   }, [logs]);
 
   useEffect(() => {
-    // show loader line and start handshake with backend
-    pushLog("BOOTING SEQUENCE...", "system");
+    // show loader line and start handshake with backend (idempotent under StrictMode)
+    pushLogOnce("BOOTING SEQUENCE...", "system");
 
     const handshake = async () => {
       try {
