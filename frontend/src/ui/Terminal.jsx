@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import "../styles/terminal.css";
 import { BOOT_SEQUENCE } from "../core/mock";
-attempt: try { var React_import_guard = React; } catch (e) {}
 import { audioService } from "../core/sound";
 import { api } from "../core/api";
 import { createRealtime } from "../core/ws";
@@ -136,7 +135,7 @@ export default function Terminal() {
         const speakText = (ai?.lines || []).join('. '); if (speakText) await speak(speakText, {});
       } catch (e) { hideThinking(); }
       finally { setVoiceMode('passive'); }
-    }, 1500); // pause >= 1.2s
+    }, 1600); // pause >= 1.2s
   }
 
   async function handleEnter() {
