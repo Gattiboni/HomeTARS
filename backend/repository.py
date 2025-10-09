@@ -91,7 +91,7 @@ class MongoRepository(BaseRepository):
         q: Dict[str, Any] = {}
         if since:
             q["ts"] = {"$gt": since}
-        if level in {"system", "user", "error"}:
+        if level in {"system", "user", "error", "info"}:
             q["level"] = level
         cursor = self.db.logs.find(q).sort("ts", -1).limit(limit)
         docs = await cursor.to_list(length=limit)
