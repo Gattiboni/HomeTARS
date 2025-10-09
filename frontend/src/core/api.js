@@ -1,4 +1,5 @@
-// Phase 2/3/4/5/6 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
+// Phase 2..6 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
+import { getFlags } from "./flags";
 
 const BASE = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
 const API = `${BASE}/api`;
@@ -10,11 +11,7 @@ async function httpGet(path) {
 }
 
 async function httpPost(path, body) {
-  const res = await fetch(`${API}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify(body || {})
-  });
+  const res = await fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body || {}) });
   if (!res.ok) throw new Error(`POST ${path} ${res.status}`);
   return res.json();
 }
@@ -30,10 +27,16 @@ export const api = {
     return httpGet(`/logs${qs ? `?${qs}` : ''}`);
   },
   command: (command) => httpPost('/command', { command }),
-  ai: (prompt, session_id, context) => {
+  ai: async (prompt, session_id, context) => {
+    const flags = getFlags();
+    if (flags.AI_DISABLED) {
+      // lightweight local fallback
+      return { lines: ["[AI DISABLED] Running in economy mode."], level: 'info' };
+    }
     const payload = { prompt };
     if (session_id) payload.session_id = session_id;
     if (context) payload.context = context;
     return httpPost('/ai', payload);
   },
+  automationLog: (text, meta) => httpPost('/automation/log', { text, meta }),
 };
