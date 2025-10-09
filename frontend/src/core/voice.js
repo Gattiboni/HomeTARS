@@ -1,13 +1,20 @@
-// Phase 5 Voice utilities with wake word
+// Phase 5/6 Voice utilities with flags and longer debounce
 // Endpoints:
 //   POST /api/voice/transcribe (multipart file) -> { text, language, wake, command_text }
 //   POST /api/ai { prompt }
 //   POST /api/voice/tts (form: text, voice, fmt)
+import { getFlags } from "./flags";
 
 const BASE = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
 const API = `${BASE}/api`;
 
 export function startMic({ onTranscript, onError, onState }) {
+  const flags = getFlags();
+  if (flags.VOICE_DISABLED) {
+    onState && onState('stopped');
+    return { stop: () => {} };
+  }
+
   let stream = null;
   let rec = null;
 
@@ -25,12 +32,13 @@ export function startMic({ onTranscript, onError, onState }) {
           const res = await fetch(`${API}/voice/transcribe`, { method: 'POST', body: fd });
           if (!res.ok) throw new Error(`transcribe ${res.status}`);
           const data = await res.json();
-          onTranscript && onTranscript(data);
+          if (data?.text) onTranscript && onTranscript(data);
         } catch (err) {
           onError && onError(err);
         }
       };
-      rec.start(3000); // 3s slices
+      // longer debounce slices (economy): 6s
+      rec.start(6000);
     } catch (err) {
       onState && onState('denied');
       onError && onError(err);
@@ -49,6 +57,8 @@ export function startMic({ onTranscript, onError, onState }) {
 }
 
 export async function speak(text, { voice = 'alloy', fmt = 'mp3' } = {}) {
+  const flags = getFlags();
+  if (flags.VOICE_DISABLED) return; // no TTS when disabled
   const fd = new FormData();
   fd.append('text', text);
   fd.append('voice', voice);

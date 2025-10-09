@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import "../styles/terminal.css";
 import { BOOT_SEQUENCE } from "../core/mock";
+attempt: try { var React_import_guard = React; } catch (e) {}
 import { audioService } from "../core/sound";
 import { api } from "../core/api";
 import { createRealtime } from "../core/ws";
 import { startMic, speak } from "../core/voice";
 import { detectAutomationMode, parseIntentsFromLines, inferIntentHeuristic, dispatchIntent } from "../core/intent";
+import { getFlags } from "../core/flags";
 import { Mic } from "lucide-react";
 
 export default function Terminal() {
+  const flags = getFlags();
   const [logs, setLogs] = useState([]);
   const [input, setInput] = useState("");
   const [online, setOnline] = useState(false);
@@ -46,8 +49,8 @@ export default function Terminal() {
         await fetchInitialLogs();
         runBootSequenceOnce();
         setBooting(false);
-        startRealtime();
-        micRef.current = startMic({ onTranscript: onVoiceData, onError: () => {}, onState: setMicState });
+        if (!flags.WS_DISABLED) wsRef.current = createRealtime({ onOpen: () => setWsActive(true), onClose: () => setWsActive(false), onError: () => {}, onLog: onRealtimeLog });
+        if (!flags.VOICE_DISABLED) micRef.current = startMic({ onTranscript: onVoiceData, onError: () => {}, onState: setMicState });
       } catch (e) {
         setOnline(false);
         pushLogOnce("CORE LINK LOST", "error");
@@ -57,23 +60,10 @@ export default function Terminal() {
     handshake();
 
     const onKey = (e) => { if ((e.altKey || e.ctrlKey) && (e.key === "d" || e.key === "D")) setDebug((d) => !d); };
-    const onAutomation = (e) => {
-      const it = e.detail || {};
-      const msg = automationIntentToPhrase(it);
-      if (msg) {
-        pushLog(msg, 'info');
-        // speak short feedback
-        speak(msg, {}).catch(()=>{});
-      }
-    };
-
     window.addEventListener("keydown", onKey);
-    window.addEventListener('tars:automationCommand', onAutomation);
-
     return () => {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener('tars:automationCommand', onAutomation);
       try { wsRef.current && wsRef.current.stop(); } catch (_) {}
       hideThinking();
       try { micRef.current && micRef.current.stop(); } catch (_) {}
@@ -81,19 +71,10 @@ export default function Terminal() {
     };
   }, []);
 
-  function automationIntentToPhrase(intent) {
-    if (!intent || !intent.action) return null;
-    switch (intent.action) {
-      case 'lights_on': return 'Affirmative. Turning lights on.';
-      case 'lights_off': return 'Understood. Turning lights off.';
-      case 'set_brightness': return `Dimmer set to ${Math.round(intent.value ?? 0)}%.`;
-      case 'dim_lights': return `Dimming lights${intent.value? ' to ' + Math.round(intent.value) + '%' : ''}.`;
-      case 'set_temperature': return `Setting temperature to ${intent.value}°C.`;
-      case 'play_music': return 'Music on.';
-      case 'stop_music': return 'Music paused.';
-      case 'set_volume': return `Volume set to ${Math.round(intent.value ?? 0)}%.`;
-      default: return null;
-    }
+  function onRealtimeLog(item) {
+    setMetrics((m) => ({ ...m, lastWsAt: new Date(), wsCount: (m.wsCount || 0) + 1 }));
+    if (seenIdsRef.current.has(item.id)) return; seenIdsRef.current.add(item.id);
+    typeOut(item.text, item.level);
   }
 
   function scheduleRetry() {
@@ -101,7 +82,9 @@ export default function Terminal() {
     retryTimerRef.current = setTimeout(async () => {
       try {
         const t0 = performance.now(); await api.status(); const t1 = performance.now(); setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) }));
-        setOnline(true); await fetchInitialLogs(); runBootSequenceOnce(); setBooting(false); startRealtime(); micRef.current = startMic({ onTranscript: onVoiceData, onError: () => {}, onState: setMicState });
+        setOnline(true); await fetchInitialLogs(); runBootSequenceOnce(); setBooting(false);
+        if (!flags.WS_DISABLED && !wsRef.current) wsRef.current = createRealtime({ onOpen: () => setWsActive(true), onClose: () => setWsActive(false), onError: () => {}, onLog: onRealtimeLog });
+        if (!flags.VOICE_DISABLED && !micRef.current) micRef.current = startMic({ onTranscript: onVoiceData, onError: () => {}, onState: setMicState });
       } catch (e) { setOnline(false); scheduleRetry(); }
     }, 3000);
   }
@@ -116,18 +99,6 @@ export default function Terminal() {
       setLogs((prev) => { const existing = new Set(prev.map((p) => p.id)); const merged = [...prev, ...mapped.filter((m) => !existing.has(m.id))]; merged.forEach((m) => seenIdsRef.current.add(m.id)); return merged; });
       if (items.length) lastFetchedRef.current = items[items.length - 1].ts;
     } catch (e) {}
-  }
-
-  function startRealtime() {
-    if (wsRef.current) return;
-    wsRef.current = createRealtime({
-      onOpen: () => setWsActive(true), onClose: () => setWsActive(false), onError: () => {},
-      onLog: (item) => {
-        setMetrics((m) => ({ ...m, lastWsAt: new Date(), wsCount: (m.wsCount || 0) + 1 }));
-        if (seenIdsRef.current.has(item.id)) return; seenIdsRef.current.add(item.id);
-        typeOut(item.text, item.level);
-      },
-    });
   }
 
   function runBootSequenceOnce() { if (bootRanRef.current) return; bootRanRef.current = true; let t = 0; BOOT_SEQUENCE.forEach((step) => { t += step.delay; setTimeout(() => pushLog(step.text, "system"), t); }); }
@@ -165,7 +136,7 @@ export default function Terminal() {
         const speakText = (ai?.lines || []).join('. '); if (speakText) await speak(speakText, {});
       } catch (e) { hideThinking(); }
       finally { setVoiceMode('passive'); }
-    }, 1500);
+    }, 1500); // pause >= 1.2s
   }
 
   async function handleEnter() {
@@ -177,7 +148,6 @@ export default function Terminal() {
 
     const cmdLower = raw.trim().toLowerCase();
     const isLocal = KNOWN.current.has(cmdLower) || /^switch\s+mode\s+(terminal|logs|status|automations)$/.test(cmdLower);
-
     const sm = cmdLower.match(/^switch\s+mode\s+(terminal|logs|status|automations)$/);
     if (sm) { dispatchIntent({ action: 'switch_mode', target: sm[1] }); pushLog(`SWITCHING MODE → ${sm[1].toUpperCase()}`, 'info'); return; }
 
