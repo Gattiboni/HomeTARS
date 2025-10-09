@@ -13,7 +13,7 @@ export default function Terminal() {
   const [wsActive, setWsActive] = useState(false);
   const [flash, setFlash] = useState(false);
   const [debug, setDebug] = useState(false);
-  const [metrics, setMetrics] = useState({ lastHttpMs: null, lastWsAt: null, wsCount: 0 });
+  const [metrics, setMetrics] = useState({ lastHttpMs: null, lastWsAt: null, wsCount: 0, lastAiMs: null });
 
   const logsRef = useRef(null);
   const bootRanRef = useRef(false);
@@ -21,6 +21,9 @@ export default function Terminal() {
   const retryTimerRef = useRef(null);
   const wsRef = useRef(null);
   const seenIdsRef = useRef(new Set());
+  const thinkingRef = useRef({ id: null, timer: null, phase: 0 });
+
+  const KNOWN = useRef(new Set(["help", "status", "time", "clear"]))
 
   useEffect(() => {
     if (!logsRef.current) return;
@@ -63,6 +66,7 @@ export default function Terminal() {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       window.removeEventListener("keydown", onKey);
       try { wsRef.current && wsRef.current.stop(); } catch (_) {}
+      hideThinking();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -156,6 +160,29 @@ export default function Terminal() {
     }, Math.min(140, Math.max(50, 1000 / (text.length || 1))));
   }
 
+  function showThinking() {
+    hideThinking();
+    const id = crypto.randomUUID();
+    setLogs((prev) => [...prev, { id, text: "…", type: "info" }]);
+    const timer = setInterval(() => {
+      thinkingRef.current.phase = (thinkingRef.current.phase + 1) % 3;
+      const dots = ".".repeat(thinkingRef.current.phase + 1);
+      setLogs((prev) => prev.map((l) => (l.id === id ? { ...l, text: dots } : l)));
+    }, 220);
+    thinkingRef.current = { id, timer, phase: 0 };
+  }
+
+  function hideThinking() {
+    if (thinkingRef.current.timer) {
+      clearInterval(thinkingRef.current.timer);
+    }
+    const id = thinkingRef.current.id;
+    if (id) {
+      setLogs((prev) => prev.filter((l) => l.id !== id));
+    }
+    thinkingRef.current = { id: null, timer: null, phase: 0 };
+  }
+
   async function handleEnter() {
     const raw = input;
     if (!raw.trim()) return;
@@ -164,7 +191,7 @@ export default function Terminal() {
     setFlash(true);
     setTimeout(() => setFlash(false), 180);
 
-    // Only echo locally if WS is not active (when active, echo tulee via WS almost instantly)
+    // Only echo locally if WS is not active (when active, echo via WS)
     if (!wsActive) {
       setLogs((prev) => [...prev, { id: crypto.randomUUID(), text: `> ${raw}`, type: "user" }]);
     }
@@ -177,7 +204,10 @@ export default function Terminal() {
       return;
     }
 
-    if (raw.trim().toLowerCase() === "clear") {
+    const cmdLower = raw.trim().toLowerCase();
+    const isLocal = KNOWN.current.has(cmdLower);
+
+    if (cmdLower === "clear") {
       try {
         const t0 = performance.now();
         await api.command(raw.trim());
@@ -188,14 +218,16 @@ export default function Terminal() {
       return;
     }
 
+    // always send to backend so logs/realtime are recorded
+    let wasError = false;
     try {
       const t0 = performance.now();
       const res = await api.command(raw.trim());
       const t1 = performance.now();
       setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) }));
+      wasError = res?.level === "error";
 
-      // If WS is active, rely on real-time stream, else print lines via HTTP result
-      if (!wsActive) {
+      if (!wsActive && !wasError) {
         const lines = Array.isArray(res?.lines) ? res.lines : [];
         const level = res?.level === "error" ? "error" : "system";
         let delay = 0;
@@ -208,6 +240,32 @@ export default function Terminal() {
       pushLogOnce("CORE LINK LOST", "error");
       setOnline(false);
       scheduleRetry();
+      return;
+    }
+
+    // For unknown commands (or when we want suggestions), call /api/ai with thinking effect
+    if (!isLocal) {
+      showThinking();
+      try {
+        const t0 = performance.now();
+        const ai = await api.ai(raw.trim());
+        const t1 = performance.now();
+        hideThinking();
+        setMetrics((m) => ({ ...m, lastAiMs: Math.round(t1 - t0) }));
+
+        if (!wsActive) {
+          const lines = Array.isArray(ai?.lines) ? ai.lines : [];
+          const type = ai?.level || "info";
+          let delay = 0;
+          lines.forEach((line) => {
+            delay += 120;
+            setTimeout(() => pushLog(line, type), delay);
+          });
+        }
+      } catch (e) {
+        hideThinking();
+        // silent fail: we still have /command error line
+      }
     }
   }
 
@@ -254,6 +312,7 @@ export default function Terminal() {
         {debug && (
           <div className="debug-panel">
             <div>HTTP last: {metrics.lastHttpMs != null ? `${metrics.lastHttpMs} ms` : '—'}</div>
+            <div>AI last: {metrics.lastAiMs != null ? `${metrics.lastAiMs} ms` : '—'}</div>
             <div>WS events: {metrics.wsCount || 0}</div>
             <div>WS last: {metrics.lastWsAt ? new Date(metrics.lastWsAt).toLocaleTimeString() : '—'}</div>
           </div>

@@ -1,11 +1,12 @@
 /*
- HomeTARS — Terminal Phase 1+2+3 styles
+ HomeTARS — Terminal Phase 1+2+3+4 styles
 */
 
 :root {
   --bg: #000000;
   --neon: #00FF99;
   --neon-dim: #00cc7a;
+  --info: #66ccff;
   --text: #00FF99;
   --muted: #0a0a0a;
 }
@@ -79,6 +80,7 @@ body {
 .log-line.system { color: var(--neon); }
 .log-line.user { color: var(--neon-dim); }
 .log-line.error { color: #ff5577; text-shadow: 0 0 8px rgba(255, 85, 119, 0.2); }
+.log-line.info { color: var(--info); text-shadow: 0 0 6px rgba(102, 204, 255, 0.15); }
 
 .input-row {
   display: flex;

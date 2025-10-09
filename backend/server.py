@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 import uuid
 from datetime import datetime
+from difflib import get_close_matches
 
 from repository import BaseRepository, MongoRepository, SupabaseRepository
 from ws_manager import manager
@@ -54,7 +55,7 @@ class SystemStatus(BaseModel):
 class LogItem(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     ts: datetime = Field(default_factory=datetime.utcnow)
-    level: Literal['system', 'user', 'error'] = 'system'
+    level: Literal['system', 'user', 'error', 'info'] = 'system'
     text: str
 
 class LogsResponse(BaseModel):
@@ -69,10 +70,20 @@ class CommandResponse(BaseModel):
     level: Literal['system', 'error'] = 'system'
     wrote_log: bool = True
 
+class AIRequest(BaseModel):
+    prompt: str
+    session_id: Optional[str] = None
+
+class AIResponse(BaseModel):
+    lines: List[str]
+    level: Literal['info', 'system', 'error'] = 'info'
+
 
 # ----------------------------
 # Helpers
 # ----------------------------
+KNOWN = ["help", "status", "time", "clear"]
+
 
 def _known_command_lines(cmd: str) -> (List[str], str):
     cmd_l = cmd.strip().lower()
@@ -92,6 +103,32 @@ def _known_command_lines(cmd: str) -> (List[str], str):
     if cmd_l == "clear":
         return ([], "system")
     return (["COMMAND NOT RECOGNIZED."], "error")
+
+
+def _ai_suggest(prompt: str) -> List[str]:
+    p = (prompt or "").strip().lower()
+    # hard synonyms
+    synonyms = {
+        "statuz": "status",
+        "stats": "status",
+        "statuss": "status",
+        "clr": "clear",
+        "cls": "clear",
+        "halp": "help",
+        "hep": "help",
+        "tym": "time",
+        "clock": "time",
+    }
+    if p in synonyms:
+        return [f"DID YOU MEAN: {synonyms[p]}?"]
+
+    matches = get_close_matches(p, KNOWN, n=2, cutoff=0.6)
+    if matches:
+        if len(matches) == 1:
+            return [f"DID YOU MEAN: {matches[0]}?"]
+        return ["DID YOU MEAN:"] + [f" - {m}" for m in matches]
+
+    return ["NO MATCH FOUND.", "TRY: help | status | time | clear"]
 
 
 # ----------------------------
@@ -156,13 +193,31 @@ async def post_command(payload: CommandRequest):
     return CommandResponse(echo=cmd, lines=lines, level=level, wrote_log=True)
 
 
+@api_router.post("/ai", response_model=AIResponse)
+async def post_ai(input: AIRequest):
+    prompt = (input.prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    # Mocked AI suggestion flow
+    suggestions = _ai_suggest(prompt)
+
+    # persist as info logs and broadcast
+    for ln in suggestions:
+        li = await repo.write_log("info", ln)
+        await manager.broadcast_json({"type": "log", "item": {
+            "id": li.id, "ts": li.ts, "level": li.level, "text": li.text
+        }})
+
+    return AIResponse(lines=suggestions, level='info')
+
+
 # WebSocket for real-time events
 @api_router.websocket("/events/ws")
 async def events_ws(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            # Keep the connection alive; we don't require client messages yet
             await websocket.receive_text()
     except Exception:
         await manager.disconnect(websocket)
