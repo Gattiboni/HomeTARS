@@ -292,10 +292,8 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "Natural Language Intent Processing (Phase 6)"
-  stuck_tasks:
-    - "Natural Language Intent Processing (Phase 6)"
+  current_focus: []
+  stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
