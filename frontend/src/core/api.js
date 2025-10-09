@@ -1,4 +1,4 @@
-// Phase 2/3/4 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
+// Phase 2/3/4/5/6 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
 
 const BASE = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
 const API = `${BASE}/api`;
@@ -30,5 +30,10 @@ export const api = {
     return httpGet(`/logs${qs ? `?${qs}` : ''}`);
   },
   command: (command) => httpPost('/command', { command }),
-  ai: (prompt, session_id) => httpPost('/ai', { prompt, session_id }),
+  ai: (prompt, session_id, context) => {
+    const payload = { prompt };
+    if (session_id) payload.session_id = session_id;
+    if (context) payload.context = context;
+    return httpPost('/ai', payload);
+  },
 };
