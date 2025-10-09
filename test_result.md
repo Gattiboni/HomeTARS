@@ -220,7 +220,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Phase 4 comprehensive testing completed"
+    - "Phase 5 voice + wake word testing completed"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
