@@ -1,5 +1,5 @@
 /*
- HomeTARS — Terminal Phase 1+2+3+4 styles
+ HomeTARS — Terminal Phase 1..5 styles
 */
 
 :root {
@@ -9,6 +9,7 @@
   --info: #66ccff;
   --text: #00FF99;
   --muted: #0a0a0a;
+  --denied: #ff7755;
 }
 
 html, body, #root, .app-root {
@@ -134,6 +135,27 @@ body {
   display: flex;
   gap: 16px;
   opacity: 0.9;
+}
+
+/* mic indicator */
+.mic-indicator {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--neon-dim);
+  border: 1px solid rgba(0,255,153,0.25);
+}
+.mic-indicator.on {
+  color: var(--neon);
+  box-shadow: 0 0 12px rgba(0,255,153,0.35);
+}
+.mic-indicator.denied {
+  color: var(--denied);
+  border-color: rgba(255, 119, 85, 0.4);
+  box-shadow: 0 0 12px rgba(255,119,85,0.25);
 }
 
 @keyframes blink {

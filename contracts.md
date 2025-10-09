@@ -1,46 +1,37 @@
-# HomeTARS — Phase 2/3/4 API Contracts (Terminal ⇄ FastAPI)
+# HomeTARS — Phase 2/3/4/5 API Contracts (Terminal ⇄ FastAPI)
 
 Purpose
-- Define REST contracts and the new AI mock endpoint for Phase 4
-- Keep storage-agnostic (Mongo active; Supabase repo implemented, off-by-default)
+- Define REST contracts for Phases 2-5, including voice endpoints
+- Storage-agnostic: Mongo active; Supabase repo implemented (off-by-default)
 
 Base URL and routing
-- All backend routes under prefix: /api
+- Prefix: /api
 - Frontend uses process.env.REACT_APP_BACKEND_URL + "/api"
 
-Shared models
-- LogItem
-  - id: string (uuid)
-  - ts: string (ISO-8601)
-  - level: 'system' | 'user' | 'error' | 'info'
-  - text: string
-- SystemStatus
-  - status: 'ONLINE' | 'OFFLINE'
-  - updated_at: string (ISO-8601)
+Models
+- LogItem { id: string, ts: ISO, level: 'system'|'user'|'error'|'info', text: string }
+- SystemStatus { status: 'ONLINE'|'OFFLINE', updated_at: ISO }
 - CommandRequest { command: string }
 - CommandResponse { echo: string, lines: string[], level: 'system'|'error', wrote_log: boolean }
 - AIRequest { prompt: string, session_id?: string }
 - AIResponse { lines: string[], level: 'info'|'system'|'error' }
+- TranscribeResponse { text: string, language?: string }
+- TTSResponse { audio_base64: string, format: 'mp3'|'wav'|'opus' }
 
 Endpoints
 1) GET /api/status → 200 { status, updated_at }
-2) GET /api/logs?limit=&since=&level= → 200 { items: LogItem[] }
+2) GET /api/logs?limit=&since=&level= → 200 { items }
 3) POST /api/command { command } → 200 CommandResponse
-   - Known commands: help, status, time, clear
-   - Side-effects: writes 'user' and result logs; broadcasts via WS
 4) POST /api/ai { prompt, session_id? } → 200 AIResponse
-   - Phase 4 mock: returns suggestions "did you mean...";
-   - Side-effects: writes 'info' logs for each suggestion; broadcasts via WS
+   - Phase 5: calls real LLM (OpenAI chat) with TARS persona; logs and broadcasts 'info' lines
+5) POST /api/voice/transcribe (multipart/form-data: file) → 200 TranscribeResponse
+   - Uses OpenAI Whisper; logs user voice as user entry (> (voice) text); broadcasts
+6) POST /api/voice/tts (form: text, voice?, fmt?) → 200 TTSResponse
+   - Uses OpenAI TTS (gpt-4o-mini-tts); returns base64 audio; frontend plays
 
-WebSocket (Phase 3)
-- /api/events/ws → emits { type: 'log', item: LogItem }
+WebSocket
+- /api/events/ws: emits { type: 'log', item: LogItem }
 
-Frontend behavior (Phase 4)
-- Submit flow:
-  1) Always POST /api/command to persist echo/result.
-  2) If command not in {help,status,time,clear}, show local thinking ("..."), then POST /api/ai.
-  3) If WS active, rely on WS for lines; else render lines from HTTP responses.
-  4) Styles: system=green, error=red, info=blue; typing effect for all lines.
-
-Testing notes
-- Backend tests first (fast), then UI automation; boot/WS/fallback and thinking/suggestions.
+Frontend behavior
+- Voice: mic starts after handshake; segments sent to /voice/transcribe; text → /ai; AI lines → TTS; fallback to keyboard if mic denied
+- Styles: system=green, error=red, info=blue; typing effect and thinking animation

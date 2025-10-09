@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket
+from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, UploadFile, File, Form
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -10,6 +10,8 @@ from typing import List, Optional, Literal
 import uuid
 from datetime import datetime
 from difflib import get_close_matches
+import requests
+import base64
 
 from repository import BaseRepository, MongoRepository, SupabaseRepository
 from ws_manager import manager
@@ -25,6 +27,10 @@ db = client[os.environ['DB_NAME']]
 # Optional Supabase configuration (off by default)
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+
+# OpenAI configuration for Phase 5 (audio + chat)
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+OPENAI_BASE = os.environ.get('OPENAI_BASE', 'https://api.openai.com')
 
 # Select repository implementation
 repo: BaseRepository
@@ -78,12 +84,25 @@ class AIResponse(BaseModel):
     lines: List[str]
     level: Literal['info', 'system', 'error'] = 'info'
 
+class TranscribeResponse(BaseModel):
+    text: str
+    language: Optional[str] = None
+
+class TTSResponse(BaseModel):
+    audio_base64: str
+    format: Literal['mp3', 'wav', 'opus'] = 'mp3'
+
 
 # ----------------------------
 # Helpers
 # ----------------------------
 KNOWN = ["help", "status", "time", "clear"]
 
+PERSONA_SYSTEM = (
+    "You are TARS, an onboard AI with dry wit, mild sarcasm, and absolute honesty. "
+    "Respond concisely, with a tone that balances military precision and subtle irony. "
+    "You speak both English and Portuguese fluently, switching to match the user's language."
+)
 
 def _known_command_lines(cmd: str) -> (List[str], str):
     cmd_l = cmd.strip().lower()
@@ -107,7 +126,6 @@ def _known_command_lines(cmd: str) -> (List[str], str):
 
 def _ai_suggest(prompt: str) -> List[str]:
     p = (prompt or "").strip().lower()
-    # hard synonyms
     synonyms = {
         "statuz": "status",
         "stats": "status",
@@ -129,6 +147,64 @@ def _ai_suggest(prompt: str) -> List[str]:
         return ["DID YOU MEAN:"] + [f" - {m}" for m in matches]
 
     return ["NO MATCH FOUND.", "TRY: help | status | time | clear"]
+
+
+def _openai_headers():
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY missing")
+    return {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+    }
+
+
+def _call_openai_chat(prompt: str) -> str:
+    url = f"{OPENAI_BASE}/v1/chat/completions"
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": PERSONA_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+        "max_tokens": 256,
+    }
+    headers = {**_openai_headers(), "Content-Type": "application/json"}
+    r = requests.post(url, json=payload, headers=headers, timeout=30)
+    if r.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"openai chat error: {r.text}")
+    data = r.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+
+def _call_openai_whisper(file_bytes: bytes, filename: str, mime: str) -> dict:
+    url = f"{OPENAI_BASE}/v1/audio/transcriptions"
+    files = {
+        'file': (filename, file_bytes, mime or 'application/octet-stream'),
+    }
+    data = {
+        'model': 'whisper-1',
+        'response_format': 'json',
+        # language auto-detect
+    }
+    r = requests.post(url, headers=_openai_headers(), files=files, data=data, timeout=60)
+    if r.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"openai whisper error: {r.text}")
+    return r.json()
+
+
+def _call_openai_tts(text: str, voice: str = 'alloy', fmt: str = 'mp3') -> bytes:
+    url = f"{OPENAI_BASE}/v1/audio/speech"
+    payload = {
+        "model": "gpt-4o-mini-tts",
+        "voice": voice,
+        "input": text,
+        "format": fmt,
+    }
+    headers = {**_openai_headers(), "Content-Type": "application/json", "Accept": f"audio/{'mpeg' if fmt=='mp3' else fmt}"}
+    r = requests.post(url, json=payload, headers=headers, timeout=60)
+    if r.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"openai tts error: {r.text}")
+    return r.content
 
 
 # ----------------------------
@@ -199,17 +275,66 @@ async def post_ai(input: AIRequest):
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
 
-    # Mocked AI suggestion flow
-    suggestions = _ai_suggest(prompt)
+    # Phase 5: call real LLM (OpenAI Chat) with TARS persona
+    try:
+        text = _call_openai_chat(prompt)
+    except HTTPException as e:
+        # fallback to suggestions when LLM unavailable
+        suggestions = _ai_suggest(prompt)
+        for ln in suggestions:
+            li = await repo.write_log("info", ln)
+            await manager.broadcast_json({"type": "log", "item": {
+                "id": li.id, "ts": li.ts, "level": li.level, "text": li.text
+            }})
+        return AIResponse(lines=suggestions, level='info')
 
-    # persist as info logs and broadcast
-    for ln in suggestions:
+    # persist AI lines (split into lines for terminal aesthetics)
+    lines = [seg.strip() for seg in text.split('\n') if seg.strip()]
+    if not lines:
+        lines = [text]
+    for ln in lines:
         li = await repo.write_log("info", ln)
         await manager.broadcast_json({"type": "log", "item": {
             "id": li.id, "ts": li.ts, "level": li.level, "text": li.text
         }})
 
-    return AIResponse(lines=suggestions, level='info')
+    return AIResponse(lines=lines, level='info')
+
+
+@api_router.post("/voice/transcribe", response_model=TranscribeResponse)
+async def voice_transcribe(file: UploadFile = File(...)):
+    # Read uploaded audio and send to Whisper
+    b = await file.read()
+    try:
+        data = _call_openai_whisper(b, file.filename or 'audio.webm', file.content_type or 'audio/webm')
+        text = data.get('text', '').strip()
+        lang = data.get('language')
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"transcribe error: {e}")
+
+    # Log the transcribed user input as a 'user' entry (voice)
+    if text:
+        u = await repo.write_log("user", f"> (voice) {text}")
+        await manager.broadcast_json({"type": "log", "item": {"id": u.id, "ts": u.ts, "level": u.level, "text": u.text}})
+
+    return TranscribeResponse(text=text, language=lang)
+
+
+@api_router.post("/voice/tts", response_model=TTSResponse)
+async def voice_tts(text: str = Form(...), voice: str = Form('alloy'), fmt: str = Form('mp3')):
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="text is required")
+    try:
+        audio_bytes = _call_openai_tts(text, voice=voice, fmt=fmt)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"tts error: {e}")
+
+    b64 = base64.b64encode(audio_bytes).decode('utf-8')
+    return TTSResponse(audio_base64=b64, format=fmt)
 
 
 # WebSocket for real-time events

@@ -4,6 +4,8 @@ import { BOOT_SEQUENCE } from "../core/mock";
 import { audioService } from "../core/sound";
 import { api } from "../core/api";
 import { createRealtime } from "../core/ws";
+import { startMic, speak } from "../core/voice";
+import { Mic } from "lucide-react";
 
 export default function Terminal() {
   const [logs, setLogs] = useState([]);
@@ -14,6 +16,7 @@ export default function Terminal() {
   const [flash, setFlash] = useState(false);
   const [debug, setDebug] = useState(false);
   const [metrics, setMetrics] = useState({ lastHttpMs: null, lastWsAt: null, wsCount: 0, lastAiMs: null });
+  const [micState, setMicState] = useState('idle'); // idle|active|denied|stopped
 
   const logsRef = useRef(null);
   const bootRanRef = useRef(false);
@@ -22,6 +25,7 @@ export default function Terminal() {
   const wsRef = useRef(null);
   const seenIdsRef = useRef(new Set());
   const thinkingRef = useRef({ id: null, timer: null, phase: 0 });
+  const micRef = useRef(null);
 
   const KNOWN = useRef(new Set(["help", "status", "time", "clear"]))
 
@@ -31,21 +35,25 @@ export default function Terminal() {
   }, [logs]);
 
   useEffect(() => {
-    // show loader line and start handshake with backend (idempotent under StrictMode)
     pushLogOnce("BOOTING SEQUENCE...", "system");
 
     const handshake = async () => {
       const t0 = performance.now();
       try {
-        const s = await api.status();
+        await api.status();
         const t1 = performance.now();
         setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) }));
         setOnline(true);
         await fetchInitialLogs();
         runBootSequenceOnce();
         setBooting(false);
-        // start realtime after successful handshake
         startRealtime();
+        // Start microphone listening once online
+        micRef.current = startMic({
+          onTranscript: onVoiceTranscript,
+          onError: () => {},
+          onState: setMicState,
+        });
       } catch (e) {
         setOnline(false);
         pushLogOnce("CORE LINK LOST", "error");
@@ -67,6 +75,7 @@ export default function Terminal() {
       window.removeEventListener("keydown", onKey);
       try { wsRef.current && wsRef.current.stop(); } catch (_) {}
       hideThinking();
+      try { micRef.current && micRef.current.stop(); } catch (_) {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -76,7 +85,7 @@ export default function Terminal() {
     retryTimerRef.current = setTimeout(async () => {
       try {
         const t0 = performance.now();
-        const s = await api.status();
+        await api.status();
         const t1 = performance.now();
         setMetrics((m) => ({ ...m, lastHttpMs: Math.round(t1 - t0) }));
         setOnline(true);
@@ -84,6 +93,7 @@ export default function Terminal() {
         runBootSequenceOnce();
         setBooting(false);
         startRealtime();
+        micRef.current = startMic({ onTranscript: onVoiceTranscript, onError: () => {}, onState: setMicState });
       } catch (e) {
         setOnline(false);
         scheduleRetry();
@@ -114,7 +124,7 @@ export default function Terminal() {
       onError: () => {},
       onLog: (item) => {
         setMetrics((m) => ({ ...m, lastWsAt: new Date(), wsCount: (m.wsCount || 0) + 1 }));
-        if (seenIdsRef.current.has(item.id)) return; // de-dup
+        if (seenIdsRef.current.has(item.id)) return;
         seenIdsRef.current.add(item.id);
         typeOut(item.text, item.level);
       },
@@ -183,15 +193,39 @@ export default function Terminal() {
     thinkingRef.current = { id: null, timer: null, phase: 0 };
   }
 
+  async function onVoiceTranscript(text) {
+    // Show as user, then get AI response and speak it
+    setLogs((prev) => [...prev, { id: crypto.randomUUID(), text: `> (voice) ${text}`, type: "user" }]);
+    showThinking();
+    try {
+      const t0 = performance.now();
+      const ai = await api.ai(text);
+      const t1 = performance.now();
+      hideThinking();
+      setMetrics((m) => ({ ...m, lastAiMs: Math.round(t1 - t0) }));
+
+      if (!wsActive) {
+        const lines = Array.isArray(ai?.lines) ? ai.lines : [];
+        lines.forEach((line, idx) => setTimeout(() => pushLog(line, ai?.level || 'info'), 120 * (idx + 1)));
+      }
+
+      // TTS: speak concatenated lines
+      const speakText = (ai?.lines || []).join(". ");
+      if (speakText) {
+        await speak(speakText, {});
+      }
+    } catch (e) {
+      hideThinking();
+    }
+  }
+
   async function handleEnter() {
     const raw = input;
     if (!raw.trim()) return;
 
-    // flash green border to signal command event
     setFlash(true);
     setTimeout(() => setFlash(false), 180);
 
-    // Only echo locally if WS is not active (when active, echo via WS)
     if (!wsActive) {
       setLogs((prev) => [...prev, { id: crypto.randomUUID(), text: `> ${raw}`, type: "user" }]);
     }
@@ -218,7 +252,6 @@ export default function Terminal() {
       return;
     }
 
-    // always send to backend so logs/realtime are recorded
     let wasError = false;
     try {
       const t0 = performance.now();
@@ -243,7 +276,6 @@ export default function Terminal() {
       return;
     }
 
-    // For unknown commands (or when we want suggestions), call /api/ai with thinking effect
     if (!isLocal) {
       showThinking();
       try {
@@ -264,7 +296,6 @@ export default function Terminal() {
         }
       } catch (e) {
         hideThinking();
-        // silent fail: we still have /command error line
       }
     }
   }
@@ -306,6 +337,9 @@ export default function Terminal() {
               spellCheck={false}
               aria-label="command input"
             />
+          </div>
+          <div className={`mic-indicator ${micState === 'active' ? 'on' : micState === 'denied' ? 'denied' : ''}`} title={micState}>
+            <Mic size={14} />
           </div>
         </div>
 
