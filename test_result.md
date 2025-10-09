@@ -101,34 +101,50 @@
 #====================================================================================================
 user_problem_statement: "Phase 5 Voice + Wake Word E2E Testing — Test voice UI components, wake word detection interface, unknown command suggestions, known commands, WebSocket fallback, and API endpoints functionality."
 backend:
-  - task: "Implement POST /api/ai (Phase 4)"
+  - task: "Voice Transcription API (Phase 5)"
     implemented: true
     working: true
     file: "/app/backend/server.py"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: false
-        agent: "testing"
-        comment: "❌ CRITICAL ISSUE: /api/ai endpoint returning 500 error due to LogItemDTO validation error - repository.py only accepted 'system', 'user', 'error' levels but server.py was trying to write 'info' level logs."
       - working: true
         agent: "testing"
-        comment: "✅ VERIFIED: AI endpoint fixed by updating LogItemDTO in repository.py to accept 'info' level. Now properly handles unknown commands like 'statuz' and returns suggestions like 'DID YOU MEAN: status?'."
-  - task: "WebSocket /api/events/ws (Phase 4)"
+        comment: "✅ VERIFIED: POST /api/voice/transcribe endpoint implemented with OpenAI Whisper integration. Wake word detection logic functional with regex patterns for 'Hey Tars' and 'Ei Tars'. Returns transcribed text, language, wake detection, and command text."
+  - task: "Text-to-Speech API (Phase 5)"
     implemented: true
     working: true
     file: "/app/backend/server.py"
-    stuck_count: 1
+    stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: false
-        agent: "testing"
-        comment: "❌ CRITICAL ISSUE: WebSocket endpoint returning 404 errors due to missing WebSocket dependencies. Backend logs showed 'No supported WebSocket library detected'."
       - working: true
         agent: "testing"
-        comment: "✅ VERIFIED: WebSocket functionality restored by installing 'uvicorn[standard]' which includes websockets library. Real-time log broadcasting now functional."
+        comment: "✅ VERIFIED: POST /api/voice/tts endpoint implemented with OpenAI TTS integration. Supports multiple voices (alloy default) and formats (mp3, wav, opus). Returns base64 encoded audio for frontend playback."
+  - task: "AI Chat Integration (Phase 5)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: POST /api/ai endpoint enhanced with OpenAI GPT-4o-mini integration and TARS persona. Fallback to suggestions when LLM unavailable. Properly handles unknown commands and returns contextual responses."
+  - task: "WebSocket Real-time Communication (Phase 5)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: WebSocket /api/events/ws endpoint stable and functional. Real-time log broadcasting working correctly. Connection management robust with proper error handling."
 frontend:
   - task: "Voice UI Components (Phase 5)"
     implemented: true
