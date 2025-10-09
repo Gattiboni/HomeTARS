@@ -101,48 +101,34 @@
 #====================================================================================================
 user_problem_statement: "Phase 4 UI Testing — Test unknown command suggestions, known commands, WebSocket fallback, and debug HUD toggle functionality."
 backend:
-  - task: "Implement GET /api/status"
+  - task: "Implement POST /api/ai (Phase 4)"
     implemented: true
     working: true
     file: "/app/backend/server.py"
-    stuck_count: 0
+    stuck_count: 1
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: true
-        agent: "main"
-        comment: "Added SystemStatus model, ensure_status_initialized, and /api/status route (MongoDB)."
+      - working: false
+        agent: "testing"
+        comment: "❌ CRITICAL ISSUE: /api/ai endpoint returning 500 error due to LogItemDTO validation error - repository.py only accepted 'system', 'user', 'error' levels but server.py was trying to write 'info' level logs."
       - working: true
         agent: "testing"
-        comment: "✅ VERIFIED: Status command integration working correctly. Backend responds with 'SYSTEM STATUS: ONLINE / CORE STABLE'. API endpoint functional."
-  - task: "Implement GET /api/logs"
+        comment: "✅ VERIFIED: AI endpoint fixed by updating LogItemDTO in repository.py to accept 'info' level. Now properly handles unknown commands like 'statuz' and returns suggestions like 'DID YOU MEAN: status?'."
+  - task: "WebSocket /api/events/ws (Phase 4)"
     implemented: true
     working: true
     file: "/app/backend/server.py"
-    stuck_count: 0
+    stuck_count: 1
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: true
-        agent: "main"
-        comment: "Added LogsResponse model, pagination/filter params (limit, since, level), returns items sorted by ts desc."
+      - working: false
+        agent: "testing"
+        comment: "❌ CRITICAL ISSUE: WebSocket endpoint returning 404 errors due to missing WebSocket dependencies. Backend logs showed 'No supported WebSocket library detected'."
       - working: true
         agent: "testing"
-        comment: "✅ VERIFIED: Logs endpoint working correctly. Initial logs fetched successfully during boot sequence. Pagination and sorting functional."
-  - task: "Implement POST /api/command"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Stores user command log and system/error response logs; returns structured response. Known cmds: help/status/time/clear."
-      - working: true
-        agent: "testing"
-        comment: "✅ VERIFIED: All commands working correctly. Status, time, clear, and unknown command handling all functional. Error responses properly styled."
+        comment: "✅ VERIFIED: WebSocket functionality restored by installing 'uvicorn[standard]' which includes websockets library. Real-time log broadcasting now functional."
 frontend:
   - task: "Unknown command AI suggestions (Phase 4)"
     implemented: true
