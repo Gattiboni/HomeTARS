@@ -144,7 +144,21 @@ backend:
         agent: "testing"
         comment: "✅ VERIFIED: All commands working correctly. Status, time, clear, and unknown command handling all functional. Error responses properly styled."
 frontend:
-  - task: "API client and terminal integration"
+  - task: "Unknown command AI suggestions (Phase 4)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/ui/Terminal.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "❌ CRITICAL ISSUE: /api/ai endpoint returning 500 error due to LogItemDTO validation error - 'info' level not accepted. WebSocket also failing with 404 errors."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: AI suggestions working perfectly! Fixed LogItemDTO to accept 'info' level and installed WebSocket dependencies. 'statuz' command now shows thinking animation and returns 'DID YOU MEAN: status?' in blue text. All Phase 4 features operational."
+  - task: "Known commands functionality (Phase 4)"
     implemented: true
     working: true
     file: "/app/frontend/src/ui/Terminal.jsx"
@@ -153,14 +167,33 @@ frontend:
     needs_retesting: false
     status_history:
       - working: true
-        agent: "main"
-        comment: "Added src/core/api.js using REACT_APP_BACKEND_URL; loader 'BOOTING SEQUENCE…', 'CORE LINK LOST' handling; commands wired to POST /api/command; initial logs via GET /api/logs."
-      - working: false
         agent: "testing"
-        comment: "❌ CRITICAL ISSUE: Boot sequence shows duplicate 'BOOTING SEQUENCE...' lines (found 2 instances, expected 1). This violates the clean boot requirement. All other functionality working correctly - commands, API integration, error handling, resilience all pass. Need to fix duplicate boot sequence initialization."
+        comment: "✅ VERIFIED: All known commands (help, status, time, clear) working perfectly. Clear command properly empties logs area. Commands integrate correctly with backend APIs."
+  - task: "Debug HUD toggle (Phase 4)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/ui/Terminal.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
       - working: true
         agent: "testing"
-        comment: "✅ VERIFIED: Boot sequence duplication issue FIXED! Found exactly 1 'BOOTING SEQUENCE...' line on fresh load and after reload. All functionality working perfectly: status/time/clear/unknown commands, initial logs loading, reload resilience, API integration. Repository refactor and boot fix successful."
+        comment: "✅ VERIFIED: Ctrl+D debug toggle working perfectly. Shows metrics: HTTP last (39ms), AI last (17ms), WS events (14), WS last timestamp. Toggle on/off functionality confirmed."
+  - task: "WebSocket fallback functionality (Phase 4)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/core/ws.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "❌ CRITICAL ISSUE: WebSocket connections failing with 404 errors due to missing WebSocket dependencies in backend."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: WebSocket functionality restored after installing uvicorn[standard] dependencies. Real-time communication working, fallback to HTTP functional when needed."
 metadata:
   created_by: "main_agent"
   version: "1.0"
