@@ -162,7 +162,7 @@ class SupabaseRepository(BaseRepository):
         params = {"select": "*", "order": "ts.desc", "limit": str(limit)}
         if since:
             params["ts"] = f"gt.{self._iso(since)}"
-        if level in {"system", "user", "error"}:
+        if level in {"system", "user", "error", "info"}:
             params["level"] = f"eq.{level}"
         r = await self._req("GET", "/logs", params=params)
         data = r.json() if r.status_code == 200 else []
