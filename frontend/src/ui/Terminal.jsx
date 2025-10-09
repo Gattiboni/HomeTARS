@@ -153,7 +153,7 @@ export default function Terminal() {
       const next = text.slice(0, i);
       setLogs((prev) => prev.map((l) => (l.id === id ? { ...l, text: next } : l)));
       if (i >= text.length) clearInterval(iv);
-    }, Math.min(25, Math.max(10, 200 / (text.length || 1))));
+    }, Math.min(40, Math.max(16, 320 / (text.length || 1))));
   }
 
   async function handleEnter() {
