@@ -169,10 +169,9 @@ test_plan:
     message: "User approved automated frontend testing. Requested storage migration to Supabase; not applied due to platform constraint (Mongo-only). Proceeding with tests on current Mongo-backed implementation."
 
   current_focus:
-    - "Verify backend endpoints behavior with edge cases (invalid since, limit bounds, unknown command)."
-    - "Frontend integration happy path: status, time, help, clear; offline handling."
+    - "Fix duplicate BOOTING SEQUENCE initialization in Terminal.jsx"
   stuck_tasks:
-    - "None"
+    - "API client and terminal integration - duplicate boot sequence issue"
   test_all: false
   test_priority: "high_first"
 
