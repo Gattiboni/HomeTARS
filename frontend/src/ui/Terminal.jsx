@@ -79,7 +79,6 @@ export default function Terminal() {
       try { micRef.current && micRef.current.stop(); } catch (_) {}
       clearAggTimer();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function automationIntentToPhrase(intent) {
