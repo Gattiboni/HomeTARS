@@ -1,11 +1,12 @@
 import React from "react";
-import { TerminalSquare, ScrollText, Activity, Sliders } from "lucide-react";
+import { TerminalSquare, ScrollText, Activity, Sliders, Bot } from "lucide-react";
 
 const MODES = [
   { id: 'terminal', label: 'Terminal', icon: TerminalSquare },
   { id: 'logs', label: 'Logs', icon: ScrollText },
   { id: 'status', label: 'Status', icon: Activity },
   { id: 'automations', label: 'Automations', icon: Sliders },
+  { id: 'gpt', label: 'GPT Link', icon: Bot },
 ];
 
 export default function ModeSwitcher({ mode, onSwitch }) {
