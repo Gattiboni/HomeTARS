@@ -290,12 +290,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Automations Panel UI Controls (Phase 6)"
     - "Natural Language Intent Processing (Phase 6)"
-    - "Automation State Persistence (Phase 6)"
-    - "Terminal Mode Switching (Phase 6)"
-    - "AI Automation Context Integration (Phase 6)"
-  stuck_tasks: []
+  stuck_tasks:
+    - "Natural Language Intent Processing (Phase 6)"
   test_all: false
   test_priority: "high_first"
 
