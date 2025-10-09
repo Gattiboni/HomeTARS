@@ -99,7 +99,7 @@
 
 
 #====================================================================================================
-user_problem_statement: "Phase 4 UI Testing — Test unknown command suggestions, known commands, WebSocket fallback, and debug HUD toggle functionality."
+user_problem_statement: "Phase 5 Voice + Wake Word E2E Testing — Test voice UI components, wake word detection interface, unknown command suggestions, known commands, WebSocket fallback, and API endpoints functionality."
 backend:
   - task: "Implement POST /api/ai (Phase 4)"
     implemented: true
