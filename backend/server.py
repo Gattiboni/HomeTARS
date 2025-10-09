@@ -13,6 +13,7 @@ from difflib import get_close_matches
 import requests
 import base64
 import re
+import json
 
 from repository import BaseRepository, MongoRepository, SupabaseRepository
 from ws_manager import manager
@@ -35,6 +36,10 @@ OPENAI_BASE = os.environ.get('OPENAI_BASE', 'https://api.openai.com')
 
 # Economy flags (backend-side env optional)
 AI_DISABLED = os.environ.get('AI_DISABLED', '').lower() in {'1','true','yes'}
+
+# GPT sessions folder
+LOGS_DIR = ROOT_DIR.parent / 'logs' / 'gpt_sessions'
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Select repository implementation
 repo: BaseRepository
@@ -99,6 +104,21 @@ class TTSResponse(BaseModel):
 class AutoLogRequest(BaseModel):
     text: str
     meta: Optional[Dict[str, Any]] = None
+
+class GPTSessionResponse(BaseModel):
+    session_id: str
+
+class GPTMessageRequest(BaseModel):
+    session_id: str
+    prompt: str
+    language: Optional[str] = None
+
+class GPTMessageResponse(BaseModel):
+    session_id: str
+    user: str
+    assistant: str
+    language: Optional[str] = None
+    audio_base64: Optional[str] = None
 
 # ----------------------------
 # Helpers
@@ -208,6 +228,40 @@ def _detect_wake(text: str):
             return True, after or None
     return False, None
 
+# GPT sessions helpers
+
+def _list_session_files():
+    return sorted([p for p in LOGS_DIR.glob('*.json')])
+
+
+def _next_session_id() -> str:
+    files = _list_session_files()
+    max_n = 0
+    for f in files:
+        try:
+            n = int(f.stem.split('-')[-1])
+            if n > max_n:
+                max_n = n
+        except Exception:
+            continue
+    return f"gpt-{max_n+1:05d}"
+
+
+def _session_path(session_id: str) -> Path:
+    return LOGS_DIR / f"{session_id}.json"
+
+
+def _append_session_log(session_id: str, role: str, content: str):
+    path = _session_path(session_id)
+    arr = []
+    if path.exists():
+        try:
+            arr = json.loads(path.read_text(encoding='utf-8'))
+        except Exception:
+            arr = []
+    arr.append({"role": role, "content": content, "ts": datetime.utcnow().isoformat()})
+    path.write_text(json.dumps(arr, ensure_ascii=False, indent=2), encoding='utf-8')
+
 # ----------------------------
 # Routes
 # ----------------------------
@@ -289,6 +343,45 @@ async def automation_log(req: AutoLogRequest):
     li = await repo.write_log("info", txt)
     await manager.broadcast_json({"type": "log", "item": {"id": li.id, "ts": li.ts, "level": li.level, "text": li.text}})
     return {"ok": True}
+
+# GPT Link endpoints
+@api_router.post("/gpt/session", response_model=GPTSessionResponse)
+async def gpt_session():
+    session_id = _next_session_id()
+    # initialize file
+    _session_path(session_id).write_text("[]", encoding='utf-8')
+    # log
+    text = f"[GPT][{session_id}] SESSION START"
+    li = await repo.write_log("info", text)
+    await manager.broadcast_json({"type": "log", "item": {"id": li.id, "ts": li.ts, "level": li.level, "text": li.text}})
+    return GPTSessionResponse(session_id=session_id)
+
+@api_router.post("/gpt/message", response_model=GPTMessageResponse)
+async def gpt_message(req: GPTMessageRequest):
+    session_id = (req.session_id or '').strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    prompt = (req.prompt or '').strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    # append user
+    _append_session_log(session_id, 'user', prompt)
+    await repo.write_log("info", f"[GPT][{session_id}] USER: {prompt}")
+
+    # assistant
+    if AI_DISABLED:
+        assistant = "Sure, I can help with that."
+        audio_b64 = None
+    else:
+        assistant = _call_openai_chat(prompt)
+        audio_b = _call_openai_tts(assistant)
+        audio_b64 = base64.b64encode(audio_b).decode('utf-8') if audio_b else None
+
+    _append_session_log(session_id, 'assistant', assistant)
+    await repo.write_log("info", f"[GPT][{session_id}] ASSISTANT: {assistant}")
+
+    return GPTMessageResponse(session_id=session_id, user=prompt, assistant=assistant, language=req.language or None, audio_base64=audio_b64)
 
 @api_router.post("/voice/transcribe", response_model=TranscribeResponse)
 async def voice_transcribe(file: UploadFile = File(...)):

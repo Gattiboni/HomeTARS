@@ -1,4 +1,4 @@
-// Phase 2..6 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
+// Phase 2..10 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
 import { getFlags } from "./flags";
 
 const BASE = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
@@ -30,7 +30,6 @@ export const api = {
   ai: async (prompt, session_id, context) => {
     const flags = getFlags();
     if (flags.AI_DISABLED) {
-      // lightweight local fallback
       return { lines: ["[AI DISABLED] Running in economy mode."], level: 'info' };
     }
     const payload = { prompt };
@@ -39,4 +38,8 @@ export const api = {
     return httpPost('/ai', payload);
   },
   automationLog: (text, meta) => httpPost('/automation/log', { text, meta }),
+  gpt: {
+    session: () => httpPost('/gpt/session', {}),
+    message: (session_id, prompt, language) => httpPost('/gpt/message', { session_id, prompt, language }),
+  }
 };
