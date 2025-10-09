@@ -99,7 +99,7 @@
 
 
 #====================================================================================================
-user_problem_statement: "Implement Phase 2 — Backend communication: GET /api/status, GET /api/logs, POST /api/command; integrate frontend; loader and error handling."
+user_problem_statement: "Phase 4 UI Testing — Test unknown command suggestions, known commands, WebSocket fallback, and debug HUD toggle functionality."
 backend:
   - task: "Implement GET /api/status"
     implemented: true
