@@ -1,0 +1,68 @@
+HomeTARS/
+├─ contracts.md
+├─ docker-compose.yml
+├─ Home Assistant Capabilities.txt
+├─ README.md
+├─ requirements.txt
+├─ test_result.md
+├─ backend/
+│  ├─ Dockerfile
+│  ├─ main.py
+│  ├─ repository.py
+│  ├─ requirements.txt
+│  ├─ server.py
+│  └─ ws_manager.py
+├─ Docs/
+│  ├─ changelog.md
+│  ├─ ContextoMestre.md
+│  ├─ Decisionlog.md
+│  ├─ Operations.md
+│  ├─ RepoStrutcture.md
+│  ├─ ROADMAP.md
+│  ├─ stack.md
+│  └─ ui/
+│     └─ README.md
+├─ frontend/
+│  ├─ components.json
+│  ├─ craco.config.js
+│  ├─ jsconfig.json
+│  ├─ package.json
+│  ├─ postcss.config.js
+│  ├─ tailwind.config.js
+│  ├─ public/
+│  │  └─ index.html
+│  └─ src/
+│     ├─ App.css
+│     ├─ App.js
+│     ├─ index.css
+│     ├─ index.js
+│     ├─ components/
+│     │  └─ ui/        (UI primitives - generated, excluded above)
+│     ├─ core/
+│     │  ├─ api.js
+│     │  ├─ automation.js
+│     │  ├─ flags.js
+│     │  ├─ gpt.js
+│     │  ├─ intent.js
+│     │  ├─ mock.js
+│     │  ├─ sound.js
+│     │  ├─ voice.js
+│     │  └─ ws.js
+│     ├─ hooks/
+│     │  └─ use-toast.js
+│     ├─ lib/
+│     │  └─ utils.js
+│     ├─ styles/
+│     │  └─ terminal.css
+│     └─ ui/
+│        ├─ Dashboard.jsx
+│        ├─ ModeSwitcher.jsx
+│        ├─ Terminal.jsx
+│        ├─ dashboard/
+│        │  ├─ AutomationsPanel.jsx
+│        │  ├─ LogsPanel.jsx
+│        │  └─ StatusPanel.jsx
+│        └─ gpt/
+│           └─ GptLink.jsx
+└─ tests/
+   └─ __init__.py
