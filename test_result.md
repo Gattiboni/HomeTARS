@@ -387,6 +387,83 @@ frontend:
       - working: true
         agent: "testing"
         comment: "✅ VERIFIED: Google Workspace integration stubs implemented correctly. GET /api/integrations/google/status returns {configured:false, scopes:[], authorized:false}. GET /api/integrations/google/gmail returns {configured:false, messages:[]}. GET /api/integrations/google/calendar returns {configured:false, events:[]}. All endpoints return proper unconfigured state."
+  - task: "Home Assistant Integration Offline (Phase 11)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/integrations/ha/entities returns {configured:false, items:[]} when not configured. POST /api/integrations/ha/service returns {configured:false, ok:false, reason:'not_configured'} when not configured. Both endpoints return proper 200 status and correct JSON shapes."
+  - task: "Tuya Integration Offline (Phase 11)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/integrations/tuya/devices returns {configured:false, items:[]} without environment variables. POST /api/integrations/tuya/service returns {configured:false, ok:false, reason:'not_configured'}. Both endpoints return proper 200 status and correct JSON shapes."
+  - task: "Gmail Integration Offline (Phase 13)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/integrations/gmail/messages returns 3 mock messages with proper structure (id, from, subject, snippet, ts). POST /api/integrations/gmail/reply returns {ok:true, id:uuid}. POST /api/integrations/gmail/suggest-reply returns {ok:true, suggestion:string} using AI fallback when AI_DISABLED=true."
+  - task: "Calendar Integration Offline (Phase 13)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/integrations/calendar/events returns 3 mock events with proper structure (id, title, start, end). POST /api/integrations/calendar/create returns {ok:true, event:{id:uuid, ...payload}}. PATCH /api/integrations/calendar/edit returns {ok:true, event:{...payload}}."
+  - task: "WhatsApp Integration Offline (Phase 13)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/integrations/whatsapp/messages returns mock message list with proper structure (id, from, text, ts). POST /api/integrations/whatsapp/send returns {ok:true, id:uuid}. Both endpoints return proper 200 status and correct JSON shapes."
+  - task: "Device State Management (Phase 13)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/state/device/dev-1 initializes and returns {ok:true, state:{id, name, on}}. POST /api/state/device/dev-1 with {on:true} updates state correctly. GET /api/state/sync returns {ok:true, items:[...]} with device list. POST /api/state/sync with {items:[...]} upserts device states correctly."
+  - task: "Reminders API (Phase 13)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/reminders returns {items:[...]} list. POST /api/reminders creates reminder with {ok:true, item:{id, text, status, created_at, due}}. PATCH /api/reminders/:id with {status:'done'} updates reminder and writes [REMINDER] completed log entry to system logs."
 metadata:
   created_by: "main_agent"
   version: "1.0"
