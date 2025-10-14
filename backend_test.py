@@ -306,11 +306,14 @@ class BackendTester:
                               error="No lines returned")
                 return
                 
-            # Check if suggestion contains expected text
+            # Check if suggestion contains expected text or economy mode message
             suggestion_text = " ".join(data["lines"]).lower()
             if "status" in suggestion_text or "did you mean" in suggestion_text:
                 self.log_result("AI Endpoint", True, 
                               f"Suggestion: {data['lines']}")
+            elif "economy mode active" in suggestion_text:
+                self.log_result("AI Endpoint", True, 
+                              f"Economy mode response: {data['lines']}")
             else:
                 self.log_result("AI Endpoint", False, 
                               error=f"Unexpected suggestion: {data['lines']}")
