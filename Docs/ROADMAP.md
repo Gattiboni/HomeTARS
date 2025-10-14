@@ -1,138 +1,192 @@
-# HomeTARS — Roadmap Futuro
+# HomeTARS — Roadmap Integrado (Fases 11 a 16)
 
-> *Do terminal ao assistente doméstico inteligente: a evolução contínua do TARS rumo à plena autonomia.*
-
----
-
-## **Visão Atualizada (2025 → 2026)**
-
-O **TARS** deixou de ser apenas um terminal sci-fi e tornou-se um **assistente multimodal, bilíngue e contextual**, capaz de ouvir, falar, compreender e agir.  
-O foco das próximas fases é **expandir seu ecossistema**, **refinar o comportamento cognitivo** e **integrá-lo ao ambiente físico e digital do usuário**.
-
-> “O código já pensa. Agora ele precisa observar, lembrar e decidir.”
+> *Da automação à inteligência contínua: o TARS evolui para compreender, agir e aprender no mundo físico e digital.*
 
 ---
 
-## **Phase 11 — Integração com Ecossistemas Domésticos**
+## **Visão Geral (2025 → 2026)**
 
-**Objetivo:** conectar o TARS com plataformas reais de automação residencial.  
-**Foco:** controle físico, feedback bidirecional e sincronização em tempo real.
+O **HomeTARS** atingiu maturidade funcional: um assistente multimodal, bilíngue e integrado, com controle local e por voz, IA generativa e suporte completo a automações residenciais e digitais. As próximas fases consolidam o ecossistema, expandem integrações reais e introduzem percepção contextual e aprendizado autônomo.
+
+> “O TARS já escuta e fala. Agora ele precisa perceber, lembrar e decidir.”
+
+---
+
+## **Phase 11 — Integração com Ecossistemas Domésticos (Implementada, offline-ready)**
+
+**Objetivo:** permitir que o TARS interaja com dispositivos reais via Home Assistant e Tuya.
+
+**Status:** *Concluída em modo offline-ready (Neo Round 2)* — todos os endpoints e contratos funcionam sem chaves externas.
 
 **Entregas:**
-- Integração direta com **Home Assistant** e **Tuya API/MQTT**.
-- Descoberta e sincronização automática de dispositivos (luzes, tomadas, sensores, música, temperatura).
-- Estado persistente no Supabase com logs e eventos por dispositivo.
-- Comandos por voz e painel de controle com status em tempo real.
 
-**Exemplo de uso:**
-> “Hey TARS, turn on the bedroom lights and set temperature to 23.”  
-> → Dispositivos reais acionados, logs e feedback falado.
+* Integrações:
+
+  * **Home Assistant** — `/api/integrations/ha/entities`, `/api/integrations/ha/service`
+  * **Tuya** — `/api/integrations/tuya/devices`, `/api/integrations/tuya/service`
+* Armazenamento de estado local e mock persistente (`/api/state/*`).
+* Painel de automações com múltiplos dispositivos por cômodo e sincronização de estados simulados.
+* Integrações retornam `configured:false` até chaves reais serem configuradas.
+
+**Próximos passos (fase de ativação local):**
+
+* Conectar chaves reais (HA, Tuya) via `.env`.
+* Mapear entidades, cenas e sensores.
+* Testar round-trip de sincronização `/api/state/*` ↔ UI.
+
+**Ativação local:**
+
+| Variável               | Descrição                      |
+| ---------------------- | ------------------------------ |
+| `HA_ENABLED`           | Ativa Home Assistant           |
+| `HOME_ASSISTANT_URL`   | URL do servidor Home Assistant |
+| `HOME_ASSISTANT_TOKEN` | Token de acesso                |
+| `TUYA_ENABLED`         | Ativa Tuya Cloud               |
+| `TUYA_ACCESS_ID`       | ID Tuya                        |
+| `TUYA_ACCESS_SECRET`   | Secret Tuya                    |
+| `TUYA_REGION`          | Região Tuya (us/eu/cn)         |
 
 ---
 
-## **Phase 12 — Context Awareness e IA Local**
+## **Phase 12 — Context Awareness e IA Local (Em planejamento)**
 
-**Objetivo:** dar ao TARS percepção e autonomia.  
-**Foco:** contexto ambiental e processamento offline.
+**Objetivo:** tornar o TARS autônomo e capaz de operar offline com contexto ambiental.
+
+**Entregas planejadas:**
+
+* **Módulo de IA local** com fallback (Llama 3 / Mistral).
+* **Percepção de contexto:** hora do dia, rotina, presença, clima.
+* Perfis de comportamento (trabalho, noturno, silêncio).
+* Aprendizado incremental de hábitos (ex: temperatura ideal, horários típicos).
+* Cache offline + **modo PWA** (operações básicas sem conexão).
+
+**Próximos passos:**
+
+* Implementar engine local IA (FastAPI worker dedicado).
+* Criar camada de contexto persistente (`context_manager.py`).
+* Adicionar comandos contextuais no prompt principal do TARS.
+
+---
+
+## **Phase 13 — Integrações Digitais e Comunicação Pessoal (Implementada, offline-ready)**
+
+**Objetivo:** expandir o TARS para a vida digital do usuário.
+
+**Status:** *Concluída em modo offline-ready (Neo Round 2)*.
 
 **Entregas:**
-- Módulo de **IA local** (Llama 3 / Mistral) para fallback e modo offline.
-- **Detecção de contexto:** inferir rotina, hora do dia, clima e presença.
-- Configuração de perfis de comportamento (modo diurno, noturno, trabalho, silêncio).
-- Aprendizado incremental local (preferências, padrões de uso, temperatura ideal, etc.).
-- Cache offline + **PWA** para operação sem internet.
 
-**Exemplo:**
-> “TARS, it’s getting cold.” → “Already increasing the temperature to your comfort level.”
+* **Gmail:**
+
+  * `GET /api/integrations/gmail/messages` — retorna mensagens mock.
+  * `POST /api/integrations/gmail/reply` — simula envio.
+  * `POST /api/integrations/gmail/suggest-reply` — gera sugestão via `/api/ai`.
+* **Google Calendar:**
+
+  * `GET /api/integrations/calendar/events`
+  * `POST /api/integrations/calendar/create`
+  * `PATCH /api/integrations/calendar/edit`
+* **WhatsApp:**
+
+  * `GET /api/integrations/whatsapp/messages`
+  * `POST /api/integrations/whatsapp/send`
+* **Reminders:**
+
+  * `/api/reminders` — CRUD completo; integração futura com Calendar.
+  * Logs `[REMINDER]` integrados e filtro no painel de Logs.
+
+**Próximos passos:**
+
+* Ativar integrações reais (OAuth Gmail/Calendar, WhatsApp Cloud API).
+* Sincronizar lembretes com Google Calendar.
+* Adicionar notificações locais e de voz.
+
+**Ativação local:**
+
+| Variável               | Descrição             |
+| ---------------------- | --------------------- |
+| `GOOGLE_CLIENT_ID`     | ID do app Google      |
+| `GOOGLE_CLIENT_SECRET` | Secret do app Google  |
+| `GOOGLE_REFRESH_TOKEN` | Token de atualização  |
+| `WHATSAPP_API_URL`     | URL da API WhatsApp   |
+| `WHATSAPP_TOKEN`       | Token de autenticação |
 
 ---
 
-## **Phase 13 — Comunicação Externa e Integrações Pessoais**
+## **Phase 14 — Captação de Voz via Mobile & Rede Local (Próxima)**
 
-**Objetivo:** expandir o TARS para fora da casa, integrando-o à vida digital.  
-**Foco:** comunicações, produtividade e conectividade pessoal.
+**Objetivo:** distribuir a captação de voz e ampliar o alcance físico do sistema.
+
+**Entregas planejadas:**
+
+* Aplicativo móvel leve (Android/iOS) como nó de voz distribuído.
+* Comunicação via **WebRTC** entre app e servidor TARS.
+* Hotword detection local ("Hey TARS" / "Ei TARS").
+* Sincronização LAN de comandos e logs.
+
+**Próximos passos:**
+
+* Criar cliente mobile (React Native ou Flutter).
+* Implementar canal local WebRTC + fallback HTTP.
+* Prototipar wake word local (VAD + Silero).
+
+---
+
+## **Phase 15 — Expansão Multissensorial e Cognitiva (Planejamento médio prazo)**
+
+**Objetivo:** integrar percepção visual e sensorial para tomada de decisão contextual.
 
 **Entregas:**
-- **Integração com Gmail** (envio e leitura de e-mails por voz e texto).
-- **Integração com Google Calendar** (agenda, lembretes, eventos recorrentes).
-- **Integração com WhatsApp API** (envio de mensagens, leitura de notificações, controle multimodal).
-- **Webhook API** para automações externas e integrações com serviços (Zapier, Notion, etc.).
 
-**Exemplo:**
-> “Hey TARS, tell Lucas I’ll be 15 minutes late.”  
-> → Envio via WhatsApp API com confirmação auditiva.
+* Módulo de **visão computacional** (OpenCV + FastAPI endpoint `/api/vision`).
+* Sensores via MQTT (movimento, energia, luminosidade, temperatura).
+* Memória de contexto (histórico de eventos e inferências).
+* Perfil emocional leve (respostas adaptadas ao contexto).
+
+**Próximos passos:**
+
+* Prototipar integração MQTT.
+* Adicionar painel “Ambiente” no Dashboard.
+* Integrar detecção facial e de objetos.
 
 ---
 
-## **Phase 14 — Captação de Voz via Mobile & Rede Local**
+## **Phase 16 — SDK e Extensões Externas (Planejamento longo prazo)**
 
-**Objetivo:** expandir o alcance físico e a responsividade do TARS.  
-**Foco:** microfones móveis e comunicação LAN direta.
+**Objetivo:** abrir o ecossistema TARS para extensões e integrações externas.
 
 **Entregas:**
-- Aplicativo móvel leve (Android/iOS) como **nó de voz distribuído**.
-- Streaming de áudio local via WebRTC para o servidor TARS principal.
-- Sincronização de comandos e logs entre dispositivos.
-- **Hotword detection** local otimizada (Hey TARS / Ei TARS) em dispositivos móveis.
 
-**Exemplo:**
-> “Ei TARS, play some music outside.”  
-> → Microfone móvel capta o comando e envia ao servidor principal.
+* **SDK interno** para criação de plugins.
+* **API pública** com autenticação JWT.
+* Suporte a **extensões dinâmicas** (instalação sem reinício).
+* Registro de extensões compatíveis e documentação formal.
 
----
+**Próximos passos:**
 
-## **Phase 15 — Modo Cognitivo e Expansão Multissensorial**
-
-**Objetivo:** dar ao TARS um modelo contínuo de percepção e aprendizado.  
-**Foco:** unificação de áudio, visão e contexto.
-
-**Entregas:**
-- API de visão computacional (Câmeras, OpenCV, reconhecimento facial/ambiental).
-- Sensores externos (luminosidade, movimento, energia, temperatura) via MQTT.
-- Sistema de “Memória de Contexto” (logging de eventos + inferência histórica).
-- Perfil emocional leve para respostas dinâmicas.
-
-**Exemplo:**
-> “TARS, did I leave the lights on in the kitchen?” → “Yes. Again.”
+* Estruturar `sdk/` com base em hooks internos.
+* Documentar contratos públicos (`contracts.md`).
+* Criar repositório paralelo `HomeTARS-Plugins`.
 
 ---
 
-## **Phase 16 — Extensões, Plugins e SDK Aberto**
+## **Roadmap Técnico Consolidado (2025–2026)**
 
-**Objetivo:** tornar o TARS expansível pela comunidade e adaptável a qualquer ambiente.  
-**Foco:** modularidade e ecossistema de terceiros.
-
-**Entregas:**
-- **SDK interno** para criação de plugins e módulos externos.
-- **API pública** com autenticação segura (tokens JWT).
-- Suporte a **extensões dinâmicas** (instalação, atualização e remoção sem reinício).
-- Documentação e registro de extensões compatíveis.
-
----
-
-## **Visão Longo Prazo — TARS como Entidade Autônoma**
-
-1. **Cérebro distribuído:** processamento híbrido local + nuvem.
-2. **Personalidade adaptativa:** ajustes de tom, humor e preferências.
-3. **Módulo de aprendizado contínuo:** reconhecimento de hábitos e adaptação contextual.
-4. **Controle total da casa e do ambiente digital:** voz, gesto, visão e emoção.
-
-> “TARS deixará de apenas responder — ele antecipará.”
+| Fase | Tema                                 | Status                    | Tipo                   | Prioridade |
+| ---- | ------------------------------------ | ------------------------- | ---------------------- | ---------- |
+| 11   | Integrações Home Assistant / Tuya    | Concluída (offline-ready) | Automação              | Alta       |
+| 12   | IA Local e Context Awareness         | Em planejamento           | Autonomia              | Média      |
+| 13   | Gmail, Calendar, WhatsApp, Reminders | Concluída (offline-ready) | Conectividade          | Alta       |
+| 14   | Voz via Mobile / LAN                 | Próxima                   | Experiência multimodal | Média      |
+| 15   | Visão computacional e sensores       | Planejamento              | Expansão sensorial     | Baixa      |
+| 16   | SDK / Extensões                      | Futuro                    | Ecossistema aberto     | Baixa      |
 
 ---
 
-## **Resumo de Prioridades (Próximos 12 Meses)**
+## **Notas Finais**
 
-| Prioridade | Fase | Tema | Tipo |
-|-------------|------|------|------|
-| Alta | 11 | Integração Home Assistant / Tuya | Automação real |
-| Alta | 13 | Integrações (Gmail, Calendar, WhatsApp) | Conectividade |
-| Média | 14 | Captação de voz via mobile | Experiência multimodal |
-| Média | 12 | IA local (Llama/Mistral) | Autonomia |
-| Baixa | 15 | Visão computacional | Expansão sensorial |
-| Baixa | 16 | SDK e plugins externos | Ecossistema |
+* As fases 11 e 13 estão completas em modo offline; basta configurar variáveis e reiniciar o backend para ativação real.
+* O roadmap 12–16 prioriza contexto, autonomia e expansibilidade.
+* A documentação (contracts, operations, roadmap) está alinhada ao branch principal.
 
----
-
-> *“O TARS já é o assistente. Agora o projeto é torná-lo o lar.”*
-
+> *“O TARS não será apenas um sistema doméstico inteligente. Será uma extensão da percepção humana.”*
