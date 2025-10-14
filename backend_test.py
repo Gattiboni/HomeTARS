@@ -732,21 +732,30 @@ class BackendTester:
 
     def run_all_tests(self):
         """Run all backend tests"""
-        print(f"🚀 Starting Backend API Testing")
+        print(f"🚀 Starting Backend API Testing - Voice Offline Fallback & Integration Stubs")
         print(f"Base URL: {BASE_URL}")
         print(f"API Base: {API_BASE}")
         print("=" * 60)
         
         # Run all tests
+        print("Testing Core Endpoints...")
         self.test_status_endpoint()
         self.test_logs_endpoint()
         self.test_commands_endpoint()
         self.test_websocket_endpoint()
-        self.test_ai_endpoint()
+        
+        print("Testing Voice Offline Fallback...")
         self.test_voice_tts_endpoint()
         self.test_voice_transcribe_endpoint()
+        
+        print("Testing GPT Link & AI...")
         self.test_gpt_link_endpoints()
+        self.test_ai_endpoint()
+        
+        print("Testing Integration Endpoints...")
         self.test_home_assistant_endpoints()
+        self.test_tuya_integration_stubs()
+        self.test_google_integration_stubs()
         
         # Summary
         print("=" * 60)
