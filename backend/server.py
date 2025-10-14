@@ -537,6 +537,28 @@ async def ha_service(call: HAServiceCall):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"HA error: {e}")
 
+# Tuya stubs
+@api_router.get("/integrations/tuya/status")
+async def tuya_status():
+    return {"configured": False, "items": []}
+
+@api_router.post("/integrations/tuya/command")
+async def tuya_command(payload: Dict[str, Any]):
+    return {"configured": False, "ok": False, "reason": "not_configured"}
+
+# Google Workspace stubs
+@api_router.get("/integrations/google/status")
+async def google_status():
+    return {"configured": False, "scopes": [], "authorized": False}
+
+@api_router.get("/integrations/google/gmail")
+async def google_gmail_list():
+    return {"configured": False, "messages": []}
+
+@api_router.get("/integrations/google/calendar")
+async def google_calendar_list():
+    return {"configured": False, "events": []}
+
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
