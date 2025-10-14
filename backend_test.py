@@ -607,14 +607,14 @@ class BackendTester:
                               error=f"Expected configured=false, got {status_data['configured']}")
                 return
                 
-            self.log_result("Tuya Status", True, 
-                          f"Status response: {status_data}")
+            self.log_result("Tuya Devices", True, 
+                          f"Devices response: {status_data}")
             
-            # Test command endpoint
-            command_payload = {"device_id": "test", "command": "turn_on"}
+            # Test service endpoint (corrected from command)
+            service_payload = {"action": "turn_on", "device_id": "test"}
             
-            response = requests.post(f"{API_BASE}/integrations/tuya/command", 
-                                   json=command_payload, timeout=10)
+            response = requests.post(f"{API_BASE}/integrations/tuya/service", 
+                                   json=service_payload, timeout=10)
             
             if response.status_code != 200:
                 self.log_result("Tuya Command", False, 
