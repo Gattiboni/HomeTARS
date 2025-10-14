@@ -37,6 +37,10 @@ OPENAI_BASE = os.environ.get('OPENAI_BASE', 'https://api.openai.com')
 # Economy flags (backend-side env optional)
 AI_DISABLED = os.environ.get('AI_DISABLED', '').lower() in {'1','true','yes'}
 
+# Home Assistant configuration (optional)
+HA_URL = os.environ.get('HOME_ASSISTANT_URL')
+HA_TOKEN = os.environ.get('HOME_ASSISTANT_TOKEN')
+
 # GPT sessions folder
 LOGS_DIR = ROOT_DIR.parent / 'logs' / 'gpt_sessions'
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -119,6 +123,12 @@ class GPTMessageResponse(BaseModel):
     assistant: str
     language: Optional[str] = None
     audio_base64: Optional[str] = None
+
+# Home Assistant
+class HAServiceCall(BaseModel):
+    domain: str
+    service: str
+    entity_id: str
 
 # ----------------------------
 # Helpers
@@ -261,6 +271,17 @@ def _append_session_log(session_id: str, role: str, content: str):
             arr = []
     arr.append({"role": role, "content": content, "ts": datetime.utcnow().isoformat()})
     path.write_text(json.dumps(arr, ensure_ascii=False, indent=2), encoding='utf-8')
+
+# Home Assistant helpers
+
+def _ha_configured() -> bool:
+    return bool(HA_URL and HA_TOKEN)
+
+
+def _ha_headers():
+    if not _ha_configured():
+        raise HTTPException(status_code=503, detail="Home Assistant not configured")
+    return {"Authorization": f"Bearer {HA_TOKEN}", "Content-Type": "application/json"}
 
 # ----------------------------
 # Routes
@@ -420,6 +441,48 @@ async def events_ws(websocket: WebSocket):
             await websocket.receive_text()
     except Exception:
         await manager.disconnect(websocket)
+
+# Home Assistant integration (optional real if configured)
+@api_router.get("/integrations/ha/entities")
+async def ha_entities():
+    if not _ha_configured():
+        return {"configured": False, "items": []}
+    try:
+        r = requests.get(f"{HA_URL.rstrip('/')}/api/states", headers=_ha_headers(), timeout=10)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"HA states error: {r.text}")
+        data = r.json()
+        items = []
+        for st in data:
+            try:
+                entity_id = st.get('entity_id','')
+                if not entity_id.startswith('light.'):
+                    continue
+                name = st.get('attributes',{}).get('friendly_name', entity_id)
+                state = st.get('state','unknown')
+                items.append({"entity_id": entity_id, "name": name, "state": state})
+            except Exception:
+                continue
+        return {"configured": True, "items": items}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"HA error: {e}")
+
+@api_router.post("/integrations/ha/service")
+async def ha_service(call: HAServiceCall):
+    if not _ha_configured():
+        return {"configured": False, "ok": False, "reason": "not_configured"}
+    try:
+        url = f"{HA_URL.rstrip('/')}/api/services/{call.domain}/{call.service}"
+        r = requests.post(url, headers=_ha_headers(), json={"entity_id": call.entity_id}, timeout=10)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"HA service error: {r.text}")
+        return {"configured": True, "ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"HA error: {e}")
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
