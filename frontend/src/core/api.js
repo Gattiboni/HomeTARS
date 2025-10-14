@@ -1,7 +1,11 @@
 // Phase 2..10 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
 import { getFlags } from "./flags";
 
-const BASE = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
+const BASE = (
+  process.env.REACT_APP_BACKEND_URL ||
+  (typeof import !== 'undefined' && typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.REACT_APP_BACKEND_URL || import.meta.env.VITE_BACKEND_URL)) ||
+  ''
+).replace(/\/$/, '');
 const API = `${BASE}/api`;
 
 async function httpGet(path) {
