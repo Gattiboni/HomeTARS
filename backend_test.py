@@ -617,26 +617,26 @@ class BackendTester:
                                    json=service_payload, timeout=10)
             
             if response.status_code != 200:
-                self.log_result("Tuya Command", False, 
+                self.log_result("Tuya Service", False, 
                               error=f"HTTP {response.status_code}: {response.text}")
                 return
                 
-            command_data = response.json()
+            service_data = response.json()
             
             expected_fields = ["configured", "ok"]
             for field in expected_fields:
-                if field not in command_data:
-                    self.log_result("Tuya Command", False, 
+                if field not in service_data:
+                    self.log_result("Tuya Service", False, 
                                   error=f"Missing '{field}' field in response")
                     return
                     
-            if command_data["configured"] != False or command_data["ok"] != False:
-                self.log_result("Tuya Command", False, 
-                              error=f"Expected configured=false, ok=false, got {command_data}")
+            if service_data["configured"] != False or service_data["ok"] != False:
+                self.log_result("Tuya Service", False, 
+                              error=f"Expected configured=false, ok=false, got {service_data}")
                 return
                 
-            self.log_result("Tuya Command", True, 
-                          f"Command response: {command_data}")
+            self.log_result("Tuya Service", True, 
+                          f"Service response: {service_data}")
                           
         except Exception as e:
             self.log_result("Tuya Integration", False, error=str(e))
