@@ -36,6 +36,7 @@ OPENAI_BASE = os.environ.get('OPENAI_BASE', 'https://api.openai.com')
 
 # Economy flags (backend-side env optional)
 AI_DISABLED = os.environ.get('AI_DISABLED', '').lower() in {'1','true','yes'}
+VOICE_ONLINE = os.environ.get('VOICE_ONLINE', '').lower() in {'1','true','yes'}  # default offline fallback
 
 # Home Assistant configuration (optional)
 HA_URL = os.environ.get('HOME_ASSISTANT_URL')
