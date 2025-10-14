@@ -557,6 +557,152 @@ class BackendTester:
         except Exception as e:
             self.log_result("Home Assistant", False, error=str(e))
 
+    def test_tuya_integration_stubs(self):
+        """Test 10: Tuya integration stubs return configured=false"""
+        try:
+            # Test status endpoint
+            response = requests.get(f"{API_BASE}/integrations/tuya/status", timeout=10)
+            
+            if response.status_code != 200:
+                self.log_result("Tuya Status", False, 
+                              error=f"HTTP {response.status_code}: {response.text}")
+                return
+                
+            status_data = response.json()
+            
+            if "configured" not in status_data:
+                self.log_result("Tuya Status", False, 
+                              error="Missing 'configured' field in response")
+                return
+                
+            if status_data["configured"] != False:
+                self.log_result("Tuya Status", False, 
+                              error=f"Expected configured=false, got {status_data['configured']}")
+                return
+                
+            self.log_result("Tuya Status", True, 
+                          f"Status response: {status_data}")
+            
+            # Test command endpoint
+            command_payload = {"device_id": "test", "command": "turn_on"}
+            
+            response = requests.post(f"{API_BASE}/integrations/tuya/command", 
+                                   json=command_payload, timeout=10)
+            
+            if response.status_code != 200:
+                self.log_result("Tuya Command", False, 
+                              error=f"HTTP {response.status_code}: {response.text}")
+                return
+                
+            command_data = response.json()
+            
+            expected_fields = ["configured", "ok"]
+            for field in expected_fields:
+                if field not in command_data:
+                    self.log_result("Tuya Command", False, 
+                                  error=f"Missing '{field}' field in response")
+                    return
+                    
+            if command_data["configured"] != False or command_data["ok"] != False:
+                self.log_result("Tuya Command", False, 
+                              error=f"Expected configured=false, ok=false, got {command_data}")
+                return
+                
+            self.log_result("Tuya Command", True, 
+                          f"Command response: {command_data}")
+                          
+        except Exception as e:
+            self.log_result("Tuya Integration", False, error=str(e))
+
+    def test_google_integration_stubs(self):
+        """Test 11: Google Workspace integration stubs return configured=false"""
+        try:
+            # Test status endpoint
+            response = requests.get(f"{API_BASE}/integrations/google/status", timeout=10)
+            
+            if response.status_code != 200:
+                self.log_result("Google Status", False, 
+                              error=f"HTTP {response.status_code}: {response.text}")
+                return
+                
+            status_data = response.json()
+            
+            if "configured" not in status_data:
+                self.log_result("Google Status", False, 
+                              error="Missing 'configured' field in response")
+                return
+                
+            if status_data["configured"] != False:
+                self.log_result("Google Status", False, 
+                              error=f"Expected configured=false, got {status_data['configured']}")
+                return
+                
+            self.log_result("Google Status", True, 
+                          f"Status response: {status_data}")
+            
+            # Test Gmail endpoint
+            response = requests.get(f"{API_BASE}/integrations/google/gmail", timeout=10)
+            
+            if response.status_code != 200:
+                self.log_result("Google Gmail", False, 
+                              error=f"HTTP {response.status_code}: {response.text}")
+                return
+                
+            gmail_data = response.json()
+            
+            expected_fields = ["configured", "messages"]
+            for field in expected_fields:
+                if field not in gmail_data:
+                    self.log_result("Google Gmail", False, 
+                                  error=f"Missing '{field}' field in response")
+                    return
+                    
+            if gmail_data["configured"] != False:
+                self.log_result("Google Gmail", False, 
+                              error=f"Expected configured=false, got {gmail_data['configured']}")
+                return
+                
+            if not isinstance(gmail_data["messages"], list):
+                self.log_result("Google Gmail", False, 
+                              error=f"Expected messages to be array, got {type(gmail_data['messages'])}")
+                return
+                
+            self.log_result("Google Gmail", True, 
+                          f"Gmail response: {gmail_data}")
+            
+            # Test Calendar endpoint
+            response = requests.get(f"{API_BASE}/integrations/google/calendar", timeout=10)
+            
+            if response.status_code != 200:
+                self.log_result("Google Calendar", False, 
+                              error=f"HTTP {response.status_code}: {response.text}")
+                return
+                
+            calendar_data = response.json()
+            
+            expected_fields = ["configured", "events"]
+            for field in expected_fields:
+                if field not in calendar_data:
+                    self.log_result("Google Calendar", False, 
+                                  error=f"Missing '{field}' field in response")
+                    return
+                    
+            if calendar_data["configured"] != False:
+                self.log_result("Google Calendar", False, 
+                              error=f"Expected configured=false, got {calendar_data['configured']}")
+                return
+                
+            if not isinstance(calendar_data["events"], list):
+                self.log_result("Google Calendar", False, 
+                              error=f"Expected events to be array, got {type(calendar_data['events'])}")
+                return
+                
+            self.log_result("Google Calendar", True, 
+                          f"Calendar response: {calendar_data}")
+                          
+        except Exception as e:
+            self.log_result("Google Integration", False, error=str(e))
+
     def run_all_tests(self):
         """Run all backend tests"""
         print(f"🚀 Starting Backend API Testing")
