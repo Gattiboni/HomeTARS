@@ -549,9 +549,7 @@ async def google_calendar_list():
 # duplicate removed: tuya command (already defined above)
 
 # Google Workspace stubs
-@api_router.get("/integrations/google/status")
-async def google_status():
-    return {"configured": False, "scopes": [], "authorized": False}
+# duplicate removed: google status (already defined above)
 
 @api_router.get("/integrations/google/gmail")
 # END DUPLICATE BLOCK
