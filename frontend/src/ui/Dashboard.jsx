@@ -4,11 +4,12 @@ import LogsPanel from "./dashboard/LogsPanel";
 import StatusPanel from "./dashboard/StatusPanel";
 import AutomationsPanel from "./dashboard/AutomationsPanel";
 import GptLink from "./gpt/GptLink";
+import RemindersPanel from "./dashboard/RemindersPanel";
 import ModeSwitcher from "./ModeSwitcher";
 import "../styles/terminal.css";
 import "../core/automation"; // ensure global automation store attaches listeners
 
-const VALID = new Set(["terminal","logs","status","automations","gpt"]);
+const VALID = new Set(["terminal","logs","status","automations","reminders","gpt"]);
 
 export default function Dashboard() {
   const [mode, setMode] = useState(() => {
@@ -34,6 +35,7 @@ export default function Dashboard() {
         {mode === 'logs' && <LogsPanel />}
         {mode === 'status' && <StatusPanel />}
         {mode === 'automations' && <AutomationsPanel />}
+        {mode === 'reminders' && <RemindersPanel />}
         {mode === 'gpt' && <GptLink />}
       </div>
     </div>
