@@ -551,15 +551,13 @@ async def google_calendar_list():
 # Google Workspace stubs
 # duplicate removed: google status (already defined above)
 
-@api_router.get("/integrations/google/gmail")
+# duplicate removed: google gmail (already defined above)
 # END DUPLICATE BLOCK
 
-async def google_gmail_list():
-    return {"configured": False, "messages": []}
+# duplicate removed: google gmail list (already defined above)
 
-@api_router.get("/integrations/google/calendar")
-async def google_calendar_list():
-    return {"configured": False, "events": []}
+# duplicate removed: google calendar (already defined above)
+# duplicate removed: google calendar list (already defined above)
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
