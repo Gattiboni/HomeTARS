@@ -558,6 +558,8 @@ async def google_status():
     return {"configured": False, "scopes": [], "authorized": False}
 
 @api_router.get("/integrations/google/gmail")
+# END DUPLICATE BLOCK
+
 async def google_gmail_list():
     return {"configured": False, "messages": []}
 
