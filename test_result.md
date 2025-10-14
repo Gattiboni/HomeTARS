@@ -370,7 +370,8 @@ metadata:
 
 test_plan:
   current_focus: []
-  stuck_tasks: []
+  stuck_tasks: 
+    - "Backend Voice API Endpoints (OpenAI Integration)"
   test_all: false
   test_priority: "high_first"
 
