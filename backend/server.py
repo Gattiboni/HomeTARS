@@ -538,6 +538,8 @@ async def google_calendar_list():
     return {"configured": False, "events": []}
 
 # Tuya stubs
+# BEGIN DUPLICATE BLOCK START
+
 # CLEANUP NOTE: ignore duplicate stubs below (retained only first set above)
 
 # (duplicate stub block removed)
