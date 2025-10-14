@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Query, WebSocket, UploadFile, File, Form, Path as ApiPath
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -38,13 +38,33 @@ OPENAI_BASE = os.environ.get('OPENAI_BASE', 'https://api.openai.com')
 AI_DISABLED = os.environ.get('AI_DISABLED', '').lower() in {'1','true','yes'}
 VOICE_ONLINE = os.environ.get('VOICE_ONLINE', '').lower() in {'1','true','yes'}  # default offline fallback
 
-# Home Assistant configuration (optional)
+# Integrations flags/env
 HA_URL = os.environ.get('HOME_ASSISTANT_URL')
 HA_TOKEN = os.environ.get('HOME_ASSISTANT_TOKEN')
+HA_ENABLED = os.environ.get('HA_ENABLED', '').lower() in {'1','true','yes'}
+
+TUYA_ACCESS_ID = os.environ.get('TUYA_ACCESS_ID')
+TUYA_ACCESS_SECRET = os.environ.get('TUYA_ACCESS_SECRET')
+TUYA_REGION = os.environ.get('TUYA_REGION')
+TUYA_ENABLED = os.environ.get('TUYA_ENABLED', '').lower() in {'1','true','yes'}
+
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
+GOOGLE_REFRESH_TOKEN = os.environ.get('GOOGLE_REFRESH_TOKEN')
+
+WHATSAPP_API_URL = os.environ.get('WHATSAPP_API_URL')
+WHATSAPP_TOKEN = os.environ.get('WHATSAPP_TOKEN')
 
 # GPT sessions folder
 LOGS_DIR = ROOT_DIR.parent / 'logs' / 'gpt_sessions'
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# In-memory device state store (mock)
+_device_states: Dict[str, Dict[str, Any]] = {
+    "dev-1": {"id": "dev-1", "name": "Living Ceiling", "on": False},
+    "dev-2": {"id": "dev-2", "name": "Bedroom Bedside", "on": False},
+    "dev-3": {"id": "dev-3", "name": "Office Desk Lamp", "on": False},
+}
 
 # Select repository implementation
 repo: BaseRepository
@@ -125,11 +145,34 @@ class GPTMessageResponse(BaseModel):
     language: Optional[str] = None
     audio_base64: Optional[str] = None
 
+# Reminders
+class Reminder(BaseModel):
+    id: str
+    text: str
+    status: Literal['open','done'] = 'open'
+    created_at: str
+    due: Optional[str] = None
+
+class ReminderCreate(BaseModel):
+    text: str
+    due: Optional[str] = None
+
+class ReminderUpdate(BaseModel):
+    status: Optional[Literal['open','done']] = None
+    text: Optional[str] = None
+    due: Optional[str] = None
+
 # Home Assistant
 class HAServiceCall(BaseModel):
     domain: str
     service: str
     entity_id: str
+
+# Tuya service
+class TuyaServiceCall(BaseModel):
+    action: str
+    device_id: str
+    payload: Optional[Dict[str, Any]] = None
 
 # ----------------------------
 # Helpers
@@ -300,16 +343,19 @@ def _append_session_log(session_id: str, role: str, content: str):
     arr.append({"role": role, "content": content, "ts": datetime.utcnow().isoformat()})
     path.write_text(json.dumps(arr, ensure_ascii=False, indent=2), encoding='utf-8')
 
-# Home Assistant helpers
+# Helper: config checks
 
 def _ha_configured() -> bool:
-    return bool(HA_URL and HA_TOKEN)
+    return bool(HA_ENABLED and HA_URL and HA_TOKEN)
 
+def _tuya_configured() -> bool:
+    return bool(TUYA_ENABLED and TUYA_ACCESS_ID and TUYA_ACCESS_SECRET and TUYA_REGION)
 
-def _ha_headers():
-    if not _ha_configured():
-        raise HTTPException(status_code=503, detail="Home Assistant not configured")
-    return {"Authorization": f"Bearer {HA_TOKEN}", "Content-Type": "application/json"}
+def _google_configured() -> bool:
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN)
+
+def _whatsapp_configured() -> bool:
+    return bool(WHATSAPP_API_URL and WHATSAPP_TOKEN)
 
 # ----------------------------
 # Routes
@@ -479,7 +525,7 @@ async def ha_entities():
     if not _ha_configured():
         return {"configured": False, "items": []}
     try:
-        r = requests.get(f"{HA_URL.rstrip('/')}/api/states", headers=_ha_headers(), timeout=10)
+        r = requests.get(f"{HA_URL.rstrip('/')}/api/states", headers={"Authorization": f"Bearer {HA_TOKEN}"}, timeout=10)
         if r.status_code >= 400:
             raise HTTPException(status_code=502, detail=f"HA states error: {r.text}")
         data = r.json()
@@ -506,7 +552,7 @@ async def ha_service(call: HAServiceCall):
         return {"configured": False, "ok": False, "reason": "not_configured"}
     try:
         url = f"{HA_URL.rstrip('/')}/api/services/{call.domain}/{call.service}"
-        r = requests.post(url, headers=_ha_headers(), json={"entity_id": call.entity_id}, timeout=10)
+        r = requests.post(url, headers={"Authorization": f"Bearer {HA_TOKEN}", "Content-Type": "application/json"}, json={"entity_id": call.entity_id}, timeout=10)
         if r.status_code >= 400:
             raise HTTPException(status_code=502, detail=f"HA service error: {r.text}")
         return {"configured": True, "ok": True}
@@ -515,49 +561,166 @@ async def ha_service(call: HAServiceCall):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"HA error: {e}")
 
-# Tuya stubs
-@api_router.get("/integrations/tuya/status")
-async def tuya_status():
-    return {"configured": False, "items": []}
+# Tuya integration stubs (offline-ready)
+@api_router.get("/integrations/tuya/devices")
+async def tuya_devices():
+    if not _tuya_configured():
+        return {"configured": False, "items": []}
+    # If configured in the future, return real devices
+    return {"configured": True, "items": []}
 
-@api_router.post("/integrations/tuya/command")
-async def tuya_command(payload: Dict[str, Any]):
-    return {"configured": False, "ok": False, "reason": "not_configured"}
+@api_router.post("/integrations/tuya/service")
+async def tuya_service(call: TuyaServiceCall):
+    if not _tuya_configured():
+        return {"configured": False, "ok": False, "reason": "not_configured"}
+    # If configured, would call Tuya cloud; for now stub
+    return {"configured": True, "ok": True}
 
-# Google Workspace stubs
-@api_router.get("/integrations/google/status")
-async def google_status():
-    return {"configured": False, "scopes": [], "authorized": False}
+# Google Gmail stubs
+@api_router.get("/integrations/gmail/messages")
+async def gmail_messages():
+    cfg = _google_configured()
+    msgs = [
+        {"id": "m1", "from": "boss@example.com", "subject": "Status Report", "snippet": "Send status by EOD", "ts": datetime.utcnow().isoformat()},
+        {"id": "m2", "from": "friend@example.com", "subject": "Dinner", "snippet": "Let's meet at 8pm", "ts": datetime.utcnow().isoformat()},
+        {"id": "m3", "from": "service@example.com", "subject": "Alert", "snippet": "Your subscription renews tomorrow", "ts": datetime.utcnow().isoformat()},
+    ]
+    return {"configured": cfg, "messages": msgs}
 
-@api_router.get("/integrations/google/gmail")
-async def google_gmail_list():
-    return {"configured": False, "messages": []}
+@api_router.post("/integrations/gmail/reply")
+async def gmail_reply(payload: Dict[str, Any]):
+    cfg = _google_configured()
+    # simulate send
+    return {"configured": cfg, "ok": True, "id": str(uuid.uuid4())}
 
-@api_router.get("/integrations/google/calendar")
-async def google_calendar_list():
-    return {"configured": False, "events": []}
+@api_router.post("/integrations/gmail/suggest-reply")
+async def gmail_suggest_reply(payload: Dict[str, Any]):
+    text = str(payload.get('text') or '').strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if AI_DISABLED:
+        suggestion = f"Draft: Re: {text[:60]}...\nSure, acknowledged. Will follow up shortly."
+    else:
+        try:
+            suggestion = _call_openai_chat(f"Suggest a concise email reply to: {text}")
+        except HTTPException:
+            suggestion = f"Draft: Re: {text[:60]}...\nThanks for the update. I'll get back to you soon."
+    return {"ok": True, "suggestion": suggestion}
 
-# Tuya stubs
-# BEGIN DUPLICATE BLOCK START
+# Google Calendar stubs
+@api_router.get("/integrations/calendar/events")
+async def calendar_events():
+    cfg = _google_configured()
+    events = [
+        {"id": "e1", "title": "Standup", "start": "2025-09-10T09:00:00Z", "end": "2025-09-10T09:15:00Z"},
+        {"id": "e2", "title": "Design Review", "start": "2025-09-10T14:00:00Z", "end": "2025-09-10T15:00:00Z"},
+        {"id": "e3", "title": "Dinner", "start": "2025-09-10T20:00:00Z", "end": "2025-09-10T21:00:00Z"},
+    ]
+    return {"configured": cfg, "events": events}
 
-# CLEANUP NOTE: ignore duplicate stubs below (retained only first set above)
+@api_router.post("/integrations/calendar/create")
+async def calendar_create(payload: Dict[str, Any]):
+    cfg = _google_configured()
+    evt = {"id": str(uuid.uuid4()), **payload}
+    return {"configured": cfg, "ok": True, "event": evt}
 
-# (duplicate stub block removed)
+@api_router.patch("/integrations/calendar/edit")
+async def calendar_edit(payload: Dict[str, Any]):
+    cfg = _google_configured()
+    evt = {**payload}
+    return {"configured": cfg, "ok": True, "event": evt}
 
-# duplicate removed: tuya status (already defined above)
+# WhatsApp stubs
+@api_router.get("/integrations/whatsapp/messages")
+async def whatsapp_messages():
+    cfg = _whatsapp_configured()
+    msgs = [
+        {"id": "w1", "from": "+5511999990000", "text": "Oi, tudo bem?", "ts": datetime.utcnow().isoformat()},
+        {"id": "w2", "from": "+15551234567", "text": "Status do projeto?", "ts": datetime.utcnow().isoformat()},
+    ]
+    return {"configured": cfg, "messages": msgs}
 
-# duplicate removed: tuya command (already defined above)
+@api_router.post("/integrations/whatsapp/send")
+async def whatsapp_send(payload: Dict[str, Any]):
+    cfg = _whatsapp_configured()
+    return {"configured": cfg, "ok": True, "id": str(uuid.uuid4())}
 
-# Google Workspace stubs
-# duplicate removed: google status (already defined above)
+# Device state mock endpoints
+@api_router.get("/state/device/{device_id}")
+async def get_device_state(device_id: str = ApiPath(...)):
+    st = _device_states.get(device_id)
+    if not st:
+        # initialize
+        st = {"id": device_id, "name": device_id, "on": False}
+        _device_states[device_id] = st
+    return {"ok": True, "state": st}
 
-# duplicate removed: google gmail (already defined above)
-# END DUPLICATE BLOCK
+@api_router.post("/state/device/{device_id}")
+async def set_device_state(device_id: str = ApiPath(...), payload: Dict[str, Any] = None):
+    st = _device_states.get(device_id) or {"id": device_id, "name": device_id, "on": False}
+    if payload and 'on' in payload:
+        st['on'] = bool(payload['on'])
+    if payload and 'name' in payload:
+        st['name'] = str(payload['name'])
+    _device_states[device_id] = st
+    return {"ok": True, "state": st}
 
-# duplicate removed: google gmail list (already defined above)
+@api_router.get("/state/sync")
+async def sync_get():
+    return {"ok": True, "items": list(_device_states.values())}
 
-# duplicate removed: google calendar (already defined above)
-# duplicate removed: google calendar list (already defined above)
+@api_router.post("/state/sync")
+async def sync_post(payload: Dict[str, Any]):
+    items = payload.get('items') or []
+    for it in items:
+        did = str(it.get('id'))
+        if did:
+            _device_states[did] = {"id": did, "name": it.get('name') or did, "on": bool(it.get('on'))}
+    return {"ok": True, "items": list(_device_states.values())}
+
+# Reminders API
+@api_router.get("/reminders")
+async def reminders_list():
+    # use Mongo collection 'reminders'
+    cursor = db.reminders.find({}).sort("created_at", -1)
+    docs = await cursor.to_list(length=200)
+    items = []
+    for d in docs:
+        items.append({
+            "id": d.get("_id"),
+            "text": d.get("text"),
+            "status": d.get("status", "open"),
+            "created_at": d.get("created_at"),
+            "due": d.get("due"),
+        })
+    return {"items": items}
+
+@api_router.post("/reminders")
+async def reminders_create(body: ReminderCreate):
+    rid = str(uuid.uuid4())
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    doc = {"_id": rid, "text": body.text, "status": "open", "created_at": now_iso, "due": body.due}
+    await db.reminders.insert_one(doc)
+    li = await repo.write_log("info", f"[REMINDER] created id={rid} text={body.text}")
+    await manager.broadcast_json({"type": "log", "item": {"id": li.id, "ts": li.ts, "level": li.level, "text": li.text}})
+    return {"ok": True, "item": {"id": rid, "text": body.text, "status": "open", "created_at": now_iso, "due": body.due}}
+
+@api_router.patch("/reminders/{rid}")
+async def reminders_update(rid: str, body: ReminderUpdate):
+    updates: Dict[str, Any] = {}
+    if body.status is not None:
+        updates['status'] = body.status
+    if body.text is not None:
+        updates['text'] = body.text
+    if body.due is not None:
+        updates['due'] = body.due
+    if not updates:
+        return {"ok": False, "reason": "no_updates"}
+    await db.reminders.update_one({"_id": rid}, {"$set": updates})
+    if 'status' in updates and updates['status'] == 'done':
+        li = await repo.write_log("info", f"[REMINDER] completed id={rid}")
+        await manager.broadcast_json({"type": "log", "item": {"id": li.id, "ts": li.ts, "level": li.level, "text": li.text}})
+    return {"ok": True}
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
