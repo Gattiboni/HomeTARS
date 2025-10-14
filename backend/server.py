@@ -544,9 +544,7 @@ async def google_calendar_list():
 
 # (duplicate stub block removed)
 
-@api_router.get("/integrations/tuya/status")
-async def tuya_status():
-    return {"configured": False, "items": []}
+# duplicate removed: tuya status (already defined above)
 
 @api_router.post("/integrations/tuya/command")
 async def tuya_command(payload: Dict[str, Any]):
