@@ -339,7 +339,8 @@ async def post_command(payload: CommandRequest):
 @api_router.post("/ai", response_model=AIResponse)
 async def post_ai(input: AIRequest):
     prompt = (input.prompt or "").strip()
-    if not prompt: raise HTTPException(status_code=400, detail="prompt is required")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
     mode = None
     if input.context and isinstance(input.context, dict):
         mode = input.context.get('mode')
