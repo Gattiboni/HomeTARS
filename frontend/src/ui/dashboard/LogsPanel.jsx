@@ -28,6 +28,11 @@ export default function LogsPanel() {
           filtered = filterAutomationByType(filtered, subtype);
         }
         setItems(filtered);
+      } else if (level === 'reminders') { 
+        const res = await api.logs({ limit: 300, level: 'info' });
+        const all = [...(res.items || [])].sort((a,b)=> new Date(a.ts)-new Date(b.ts));
+        const filtered = all.filter(it => (it.text||'').startsWith('[REMINDER]'));
+        setItems(filtered);
       } else if (level === 'gpt') {
         const res = await api.logs({ limit: 300, level: 'info' });
         const all = [...(res.items || [])].sort((a,b)=> new Date(a.ts)-new Date(b.ts));
