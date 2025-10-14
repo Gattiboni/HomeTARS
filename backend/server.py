@@ -520,9 +520,7 @@ async def ha_service(call: HAServiceCall):
 async def tuya_status():
     return {"configured": False, "items": []}
 
-@api_router.post("/integrations/tuya/command")
-async def tuya_command(payload: Dict[str, Any]):
-    return {"configured": False, "ok": False, "reason": "not_configured"}
+# duplicate removed: tuya command (already defined above)
 
 # Google Workspace stubs
 @api_router.get("/integrations/google/status")
@@ -546,9 +544,7 @@ async def google_calendar_list():
 
 # duplicate removed: tuya status (already defined above)
 
-@api_router.post("/integrations/tuya/command")
-async def tuya_command(payload: Dict[str, Any]):
-    return {"configured": False, "ok": False, "reason": "not_configured"}
+# duplicate removed: tuya command (already defined above)
 
 # Google Workspace stubs
 @api_router.get("/integrations/google/status")
