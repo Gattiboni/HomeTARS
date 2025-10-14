@@ -209,6 +209,9 @@ def _call_openai_chat(prompt: str, mode: Optional[str] = None) -> str:
 
 
 def _call_openai_whisper(file_bytes: bytes, filename: str, mime: str) -> dict:
+    if not VOICE_ONLINE:
+        # offline fallback: return safe empty transcript
+        return {"text": "", "language": "en"}
     url = f"{OPENAI_BASE}/v1/audio/transcriptions"
     files = {'file': (filename, file_bytes, mime or 'application/octet-stream')}
     data = {'model': 'whisper-1', 'response_format': 'json'}
