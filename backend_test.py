@@ -587,8 +587,8 @@ class BackendTester:
     def test_tuya_integration_stubs(self):
         """Test 10: Tuya integration stubs return configured=false"""
         try:
-            # Test status endpoint
-            response = requests.get(f"{API_BASE}/integrations/tuya/status", timeout=10)
+            # Test devices endpoint (corrected from status)
+            response = requests.get(f"{API_BASE}/integrations/tuya/devices", timeout=10)
             
             if response.status_code != 200:
                 self.log_result("Tuya Status", False, 
