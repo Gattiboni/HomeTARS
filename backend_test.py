@@ -591,19 +591,19 @@ class BackendTester:
             response = requests.get(f"{API_BASE}/integrations/tuya/devices", timeout=10)
             
             if response.status_code != 200:
-                self.log_result("Tuya Status", False, 
+                self.log_result("Tuya Devices", False, 
                               error=f"HTTP {response.status_code}: {response.text}")
                 return
                 
             status_data = response.json()
             
             if "configured" not in status_data:
-                self.log_result("Tuya Status", False, 
+                self.log_result("Tuya Devices", False, 
                               error="Missing 'configured' field in response")
                 return
                 
             if status_data["configured"] != False:
-                self.log_result("Tuya Status", False, 
+                self.log_result("Tuya Devices", False, 
                               error=f"Expected configured=false, got {status_data['configured']}")
                 return
                 
