@@ -285,6 +285,83 @@ frontend:
       - working: true
         agent: "testing"
         comment: "✅ VERIFIED: AI automation context integration working. Backend correctly processes automation commands and returns appropriate feedback messages. AI responses include contextual automation feedback like 'Understood. Turning lights off.', 'Setting temperature to 26°C', 'Music on.', 'Volume set to 45%'."
+  - task: "Backend API Route Prefixing (Comprehensive)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/status returns proper JSON with status='ONLINE' and updated_at timestamp. Route prefixing working correctly with /api prefix."
+  - task: "Backend Logs API (Comprehensive)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/logs returns proper items array with log entries containing id, ts, level, text fields. Retrieved 100 log items successfully."
+  - task: "Backend Commands API (Comprehensive)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: POST /api/command with 'status', 'time', 'help', 'clear' returns expected lines and proper response structure. All commands working correctly with proper echo, lines, level, and wrote_log fields."
+  - task: "Backend WebSocket Broadcasting (Comprehensive)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: WebSocket /api/events/ws accepts connections and broadcasts test logs. Successfully received broadcast messages when commands are sent."
+  - task: "Backend GPT Link Integration (Comprehensive)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: POST /api/gpt/session creates session, POST /api/gpt/message processes messages. Logs contain [GPT][session] entries as expected. Economy mode working correctly when AI_DISABLED=true."
+  - task: "Backend Home Assistant Integration (Comprehensive)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: GET /api/integrations/ha/entities and POST /api/integrations/ha/service both return configured=false when HA environment variables not set. Proper fallback behavior implemented."
+  - task: "Backend Voice API Endpoints (OpenAI Integration)"
+    implemented: true
+    working: false
+    file: "/app/backend/server.py"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "❌ FAILED: POST /api/voice/tts and POST /api/voice/transcribe return HTTP 502 due to invalid OpenAI API key. Endpoints are structurally correct but require valid OpenAI API key for operation. Error: 'Incorrect API key provided'."
 metadata:
   created_by: "main_agent"
   version: "1.0"
