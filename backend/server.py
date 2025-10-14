@@ -221,10 +221,6 @@ def _call_openai_whisper(file_bytes: bytes, filename: str, mime: str) -> dict:
     return r.json()
 
 
-def _call_openai_tts(text: str, voice: str = 'alloy', fmt: str = 'mp3') -> bytes:
-    url = f"{OPENAI_BASE}/v1/audio/speech"
-    payload = {"model": "gpt-4o-mini-tts", "voice": voice, "input": text, "format": fmt}
-    headers = {**_openai_headers(), "Content-Type": "application/json", "Accept": f"audio/{'mpeg' if fmt=='mp3' else fmt}"}
 def _beep_wav_bytes(duration_ms: int = 300, freq_hz: int = 880, sample_rate: int = 16000) -> bytes:
     import math
     import struct
@@ -244,6 +240,14 @@ def _beep_wav_bytes(duration_ms: int = 300, freq_hz: int = 880, sample_rate: int
     data = b'data' + struct.pack('<I', data_size) + bytes(pcm)
     return riff + fmt + data
 
+
+def _call_openai_tts(text: str, voice: str = 'alloy', fmt: str = 'mp3') -> bytes:
+    if not VOICE_ONLINE:
+        # offline fallback: return beep WAV bytes regardless of requested format
+        return _beep_wav_bytes()
+    url = f"{OPENAI_BASE}/v1/audio/speech"
+    payload = {"model": "gpt-4o-mini-tts", "voice": voice, "input": text, "format": fmt}
+    headers = {**_openai_headers(), "Content-Type": "application/json", "Accept": f"audio/{'mpeg' if fmt=='mp3' else fmt}"}
     r = requests.post(url, json=payload, headers=headers, timeout=60)
     if r.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"openai tts error: {r.text}")
