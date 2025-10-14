@@ -1046,7 +1046,9 @@ class BackendTester:
         print("Testing Integration Endpoints...")
         self.test_home_assistant_endpoints()
         self.test_tuya_integration_stubs()
-        self.test_google_integration_stubs()
+        
+        print("Testing Integrations Offline (Phase 11 & 13)...")
+        self.test_integrations_offline_phase11_13()
         
         # Summary
         print("=" * 60)
