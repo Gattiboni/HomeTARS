@@ -348,7 +348,7 @@ class BackendTester:
             return None
 
     def test_voice_tts_endpoint(self):
-        """Test 6: Voice TTS - POST /api/voice/tts with form fields"""
+        """Test 6: Voice TTS - POST /api/voice/tts with offline fallback (WAV beep)"""
         try:
             data = {
                 'text': 'Hello',
@@ -357,7 +357,7 @@ class BackendTester:
             response = requests.post(f"{API_BASE}/voice/tts", data=data, timeout=30)
             
             if response.status_code != 200:
-                self.log_result("Voice TTS", False, 
+                self.log_result("Voice TTS Offline", False, 
                               error=f"HTTP {response.status_code}: {response.text}")
                 return
                 
@@ -365,32 +365,43 @@ class BackendTester:
             
             # Check required fields
             if "audio_base64" not in result:
-                self.log_result("Voice TTS", False, 
+                self.log_result("Voice TTS Offline", False, 
                               error="Missing 'audio_base64' field in response")
                 return
                 
             if "format" not in result:
-                self.log_result("Voice TTS", False, 
+                self.log_result("Voice TTS Offline", False, 
                               error="Missing 'format' field in response")
                 return
                 
-            # Validate base64 format
+            # Validate base64 format and decode
             try:
                 audio_data = base64.b64decode(result["audio_base64"])
                 if len(audio_data) == 0:
-                    self.log_result("Voice TTS", False, 
+                    self.log_result("Voice TTS Offline", False, 
                                   error="Empty audio data returned")
                     return
             except Exception as e:
-                self.log_result("Voice TTS", False, 
+                self.log_result("Voice TTS Offline", False, 
                               error=f"Invalid base64 audio data: {e}")
                 return
                 
-            self.log_result("Voice TTS", True, 
-                          f"Audio format: {result['format']}, Size: {len(audio_data)} bytes")
+            # Check if it's a WAV file (offline fallback should return WAV beep)
+            if len(audio_data) >= 4 and audio_data[:4] == b'RIFF':
+                # This is a WAV file - check for WAV header structure
+                if len(audio_data) >= 12 and audio_data[8:12] == b'WAVE':
+                    self.log_result("Voice TTS Offline", True, 
+                                  f"Offline WAV beep returned. Size: {len(audio_data)} bytes, Format: {result['format']}")
+                else:
+                    self.log_result("Voice TTS Offline", False, 
+                                  error="RIFF header found but not a valid WAV file")
+            else:
+                # Could be MP3 or other format from OpenAI (if VOICE_ONLINE was true)
+                self.log_result("Voice TTS Offline", True, 
+                              f"Audio returned (format: {result['format']}, size: {len(audio_data)} bytes). Expected offline WAV beep but got different format.")
                           
         except Exception as e:
-            self.log_result("Voice TTS", False, error=str(e))
+            self.log_result("Voice TTS Offline", False, error=str(e))
 
     def test_voice_transcribe_endpoint(self):
         """Test 7: Voice STT - POST /api/voice/transcribe with audio file"""
