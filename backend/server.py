@@ -225,6 +225,25 @@ def _call_openai_tts(text: str, voice: str = 'alloy', fmt: str = 'mp3') -> bytes
     url = f"{OPENAI_BASE}/v1/audio/speech"
     payload = {"model": "gpt-4o-mini-tts", "voice": voice, "input": text, "format": fmt}
     headers = {**_openai_headers(), "Content-Type": "application/json", "Accept": f"audio/{'mpeg' if fmt=='mp3' else fmt}"}
+def _beep_wav_bytes(duration_ms: int = 300, freq_hz: int = 880, sample_rate: int = 16000) -> bytes:
+    import math
+    import struct
+    n_samples = int(sample_rate * (duration_ms / 1000.0))
+    # Generate PCM 16-bit mono sine wave
+    pcm = bytearray()
+    for i in range(n_samples):
+        t = i / sample_rate
+        amp = int(32767 * 0.3 * math.sin(2 * math.pi * freq_hz * t))
+        pcm += struct.pack('<h', amp)
+    # Build minimal WAV header
+    data_size = len(pcm)
+    byte_rate = sample_rate * 2
+    block_align = 2
+    riff = b'RIFF' + struct.pack('<I', 36 + data_size) + b'WAVE'
+    fmt = b'fmt ' + struct.pack('<I', 16) + struct.pack('<HHIIHH', 1, 1, sample_rate, byte_rate, block_align, 16)
+    data = b'data' + struct.pack('<I', data_size) + bytes(pcm)
+    return riff + fmt + data
+
     r = requests.post(url, json=payload, headers=headers, timeout=60)
     if r.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"openai tts error: {r.text}")
