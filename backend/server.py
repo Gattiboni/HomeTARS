@@ -538,6 +538,8 @@ async def google_calendar_list():
     return {"configured": False, "events": []}
 
 # Tuya stubs
+# CLEANUP NOTE: ignore duplicate stubs below (retained only first set above)
+
 # (duplicate stub block removed)
 
 @api_router.get("/integrations/tuya/status")
