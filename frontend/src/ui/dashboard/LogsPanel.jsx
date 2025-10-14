@@ -54,7 +54,7 @@ export default function LogsPanel() {
     return () => clearInterval(timerRef.current);
   }, [level]);
 
-  const filterButtons = ['all','system','user','info','error','automation','automation:lights','automation:climate','automation:music','gpt'];
+  const filterButtons = ['all','system','user','info','error','automation','automation:lights','automation:climate','automation:music','reminders','gpt'];
 
   return (
     <div className="dashboard-panel">
