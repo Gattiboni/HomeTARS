@@ -425,7 +425,8 @@ async def voice_transcribe(file: UploadFile = File(...)):
 
 @api_router.post("/voice/tts", response_model=TTSResponse)
 async def voice_tts(text: str = Form(...), voice: str = Form('alloy'), fmt: str = Form('mp3')):
-    if not text.strip(): raise HTTPException(status_code=400, detail="text is required")
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="text is required")
     try:
         audio_bytes = _call_openai_tts(text, voice=voice, fmt=fmt)
     except HTTPException as e:
