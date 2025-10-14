@@ -311,7 +311,8 @@ async def get_logs(limit: int = Query(100, ge=1, le=1000), since: Optional[str] 
 @api_router.post("/command", response_model=CommandResponse)
 async def post_command(payload: CommandRequest):
     cmd = (payload.command or "").strip()
-    if not cmd: raise HTTPException(status_code=400, detail="command is required")
+    if not cmd:
+        raise HTTPException(status_code=400, detail="command is required")
 
     # always store user echo
     user_log = await repo.write_log("user", f"> {cmd}")
