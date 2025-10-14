@@ -483,28 +483,6 @@ async def ha_entities():
         if r.status_code >= 400:
             raise HTTPException(status_code=502, detail=f"HA states error: {r.text}")
         data = r.json()
-# Tuya stubs
-@api_router.get("/integrations/tuya/status")
-async def tuya_status():
-    return {"configured": False, "items": []}
-
-@api_router.post("/integrations/tuya/command")
-async def tuya_command(payload: Dict[str, Any]):
-    return {"configured": False, "ok": False, "reason": "not_configured"}
-
-# Google Workspace stubs
-@api_router.get("/integrations/google/status")
-async def google_status():
-    return {"configured": False, "scopes": [], "authorized": False}
-
-@api_router.get("/integrations/google/gmail")
-async def google_gmail_list():
-    return {"configured": False, "messages": []}
-
-@api_router.get("/integrations/google/calendar")
-async def google_calendar_list():
-    return {"configured": False, "events": []}
-
         items = []
         for st in data:
             try:
@@ -536,6 +514,28 @@ async def ha_service(call: HAServiceCall):
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"HA error: {e}")
+
+# Tuya stubs
+@api_router.get("/integrations/tuya/status")
+async def tuya_status():
+    return {"configured": False, "items": []}
+
+@api_router.post("/integrations/tuya/command")
+async def tuya_command(payload: Dict[str, Any]):
+    return {"configured": False, "ok": False, "reason": "not_configured"}
+
+# Google Workspace stubs
+@api_router.get("/integrations/google/status")
+async def google_status():
+    return {"configured": False, "scopes": [], "authorized": False}
+
+@api_router.get("/integrations/google/gmail")
+async def google_gmail_list():
+    return {"configured": False, "messages": []}
+
+@api_router.get("/integrations/google/calendar")
+async def google_calendar_list():
+    return {"configured": False, "events": []}
 
 # Tuya stubs
 @api_router.get("/integrations/tuya/status")
