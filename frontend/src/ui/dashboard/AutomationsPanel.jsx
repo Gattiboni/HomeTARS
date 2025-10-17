@@ -1,112 +1,60 @@
-import React, { useEffect, useState } from "react";
-import { Switch } from "../../components/ui/switch";
-import { Slider } from "../../components/ui/slider";
-
-function DeviceCard({ device, onToggle, onAdjust }) {
-  const { entity_id, name, state, attributes } = device;
-  const type = entity_id.split(".")[0];
-
-  return (
-    <div className="card" style={{ padding: "10px", minWidth: 250 }}>
-      <div className="card-title" style={{ textTransform: "capitalize" }}>{name || entity_id}</div>
-      <div className="card-body row" style={{ alignItems: "center", gap: 8 }}>
-        <span>{state}</span>
-        {(type === "light" || type === "switch" || type === "climate" || type === "media_player") && (
-          <Switch checked={state === "on"} onCheckedChange={(v) => onToggle(device, v)} />
-        )}
-      </div>
-
-      {attributes && Object.entries(attributes).map(([key, value]) => {
-        if (typeof value === "number" && (key.includes("brightness") || key.includes("volume") || key.includes("temperature") || key.includes("color_temp"))) {
-          const min = 0;
-          const max = key.includes("brightness") ? 255 : key.includes("volume") ? 100 : key.includes("color_temp") ? 500 : 40;
-          return (
-            <div key={key} className="card-body">
-              <div className="label">{key}</div>
-              <Slider
-                value={[Number(value)]}
-                onValueChange={(v) => onAdjust(device, key, v[0])}
-                min={min}
-                max={max}
-                step={1}
-              />
-            </div>
-          );
-        }
-        return (
-          <div key={key} className="card-body" style={{ fontSize: 13, opacity: 0.9 }}>
-            <strong>{key}:</strong> {String(value)}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+import React, { useEffect, useRef, useState } from "react";
+import { api } from "../../core/api";
+import DeviceCard from "./DeviceCard";
 
 export default function AutomationsPanel() {
-  const [devices, setDevices] = useState([]);
+  const [entities, setEntities] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const timerRef = useRef(null);
 
-  async function fetchEntities() {
+  async function load() {
     try {
-      const res = await fetch("http://localhost:8000/api/integrations/ha/entities");
-      const data = await res.json();
-      setDevices(data.items || []);
+      setLoading(true);
+      const res = await api.integrations.ha.entities();
+      const items = (res.items || []).filter(Boolean);
+      // sort by domain then name
+      items.sort((a,b)=> (a.domain||'').localeCompare(b.domain||'') || (a.name||'').localeCompare(b.name||''));
+      setEntities(items);
     } catch (e) {
-      console.error("Erro ao buscar entidades do Home Assistant:", e);
-    }
+      // ignore
+    } finally { setLoading(false); }
   }
 
   useEffect(() => {
-    fetchEntities();
-    const interval = setInterval(fetchEntities, 5000);
-    return () => clearInterval(interval);
+    load();
+    timerRef.current = setInterval(load, 5000);
+    return () => clearInterval(timerRef.current);
   }, []);
 
-  const onToggle = async (device, value) => {
-    const type = device.entity_id.split(".")[0];
-    try {
-      await fetch("http://localhost:8000/api/integrations/ha/service", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          domain: type,
-          service: value ? "turn_on" : "turn_off",
-          entity_id: device.entity_id,
-        }),
-      });
-      fetchEntities();
-    } catch (err) {
-      console.error("Erro ao alternar dispositivo:", err);
-    }
-  };
-
-  const onAdjust = async (device, attribute, value) => {
-    const type = device.entity_id.split(".")[0];
-    try {
-      await fetch("http://localhost:8000/api/integrations/ha/service", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          domain: type,
-          service: "set_attributes",
-          entity_id: device.entity_id,
-          attribute,
-          value,
-        }),
-      });
-      fetchEntities();
-    } catch (err) {
-      console.error("Erro ao ajustar atributo:", err);
-    }
-  };
+  const grouped = entities.reduce((acc, it)=>{ (acc[it.domain] = acc[it.domain] || []).push(it); return acc; }, {});
+  const domains = Object.keys(grouped).sort();
 
   return (
     <div className="dashboard-panel">
-      <div className="panel-header"><h3>Automations</h3></div>
+      <div className="panel-header">
+        <h3>Automations</h3>
+        <div className="filters">
+          <button className="chip" onClick={load}>{loading? '...' : 'REFRESH'}</button>
+          <div className="chip">HA: {entities.length} entities</div>
+        </div>
+      </div>
+
       <div className="grid-2">
-        {devices.map((device) => (
-          <DeviceCard key={device.entity_id} device={device} onToggle={onToggle} onAdjust={onAdjust} />
+        {domains.map(dom => (
+          <div key={dom} className="card" style={{ gridColumn:'1 / -1' }}>
+            <div className="card-title" style={{ textTransform:'capitalize' }}>{dom.replace('_',' ')}</div>
+            <div className="card-body" style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:12 }}>
+              {grouped[dom].map(ent => (
+                <DeviceCard key={ent.entity_id} entity={ent} onAfterAction={load} />
+              ))}
+            </div>
+          </div>
         ))}
+        {!domains.length && (
+          <div className="card" style={{ gridColumn:'1 / -1' }}>
+            <div className="card-body">No entities from Home Assistant. Check HA configuration.</div>
+          </div>
+        )}
       </div>
     </div>
   );

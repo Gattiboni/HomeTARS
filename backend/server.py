@@ -167,6 +167,7 @@ class HAServiceCall(BaseModel):
     domain: str
     service: str
     entity_id: str
+    data: Optional[Dict[str, Any]] = None
 
 # Tuya service
 class TuyaServiceCall(BaseModel):
@@ -235,13 +236,19 @@ def _openai_headers():
     return {"Authorization": f"Bearer {OPENAI_API_KEY}"}
 
 
-def _call_openai_chat(prompt: str, mode: Optional[str] = None) -> str:
+def _call_openai_chat(prompt: str, mode: Optional[str] = None, language: Optional[str] = None) -> str:
     if AI_DISABLED:
         return "[AI DISABLED] Economy mode active."
     url = f"{OPENAI_BASE}/v1/chat/completions"
     system_content = BASE_PERSONA
     if mode == 'automation':
         system_content = BASE_PERSONA + "\n" + INTENT_INSTRUCTIONS
+    if language:
+        lang = str(language).lower()
+        if lang.startswith('pt'):
+            system_content += "\nAlways reply in Portuguese (pt-BR)."
+        elif lang.startswith('en'):
+            system_content += "\nAlways reply in English."
     payload = {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": system_content}, {"role": "user", "content": prompt}], "temperature": 0.3, "max_tokens": 256}
     headers = {**_openai_headers(), "Content-Type": "application/json"}
     r = requests.post(url, json=payload, headers=headers, timeout=30)
@@ -253,28 +260,34 @@ def _call_openai_chat(prompt: str, mode: Optional[str] = None) -> str:
 
 def _call_openai_whisper(file_bytes: bytes, filename: str, mime: str) -> dict:
     if not VOICE_ONLINE:
-        # offline fallback: return safe empty transcript
         return {"text": "", "language": "en"}
     url = f"{OPENAI_BASE}/v1/audio/transcriptions"
-    files = {'file': (filename, file_bytes, mime or 'application/octet-stream')}
-    data = {'model': 'whisper-1', 'response_format': 'json'}
-    r = requests.post(url, headers=_openai_headers(), files=files, data=data, timeout=60)
+    # IMPORTANT: do not set Content-Type here; let requests set multipart boundary
+    files = { 'file': (filename or 'audio.webm', file_bytes, mime or 'application/octet-stream') }
+    data = { 'model': 'whisper-1' }
+    try:
+        r = requests.post(url, headers=_openai_headers(), files=files, data=data, timeout=90)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"whisper request error: {e}")
     if r.status_code >= 400:
+        # bubble up provider error body for diagnostics
         raise HTTPException(status_code=502, detail=f"openai whisper error: {r.text}")
-    return r.json()
+    try:
+        return r.json()
+    except Exception:
+        # some SDKs return text; ensure dict
+        return {"text": r.text}
 
 
 def _beep_wav_bytes(duration_ms: int = 300, freq_hz: int = 880, sample_rate: int = 16000) -> bytes:
     import math
     import struct
     n_samples = int(sample_rate * (duration_ms / 1000.0))
-    # Generate PCM 16-bit mono sine wave
     pcm = bytearray()
     for i in range(n_samples):
         t = i / sample_rate
         amp = int(32767 * 0.3 * math.sin(2 * math.pi * freq_hz * t))
         pcm += struct.pack('<h', amp)
-    # Build minimal WAV header
     data_size = len(pcm)
     byte_rate = sample_rate * 2
     block_align = 2
@@ -286,7 +299,6 @@ def _beep_wav_bytes(duration_ms: int = 300, freq_hz: int = 880, sample_rate: int
 
 def _call_openai_tts(text: str, voice: str = 'alloy', fmt: str = 'mp3') -> bytes:
     if not VOICE_ONLINE:
-        # offline fallback: return beep WAV bytes regardless of requested format
         return _beep_wav_bytes()
     url = f"{OPENAI_BASE}/v1/audio/speech"
     payload = {"model": "gpt-4o-mini-tts", "voice": voice, "input": text, "format": fmt}
@@ -297,7 +309,12 @@ def _call_openai_tts(text: str, voice: str = 'alloy', fmt: str = 'mp3') -> bytes
     return r.content
 
 # Wake word detection
-WAKE_PATTERNS = [re.compile(r"\bhey\s*[-,;:]?\s*tars\b", re.IGNORECASE), re.compile(r"\bei\s*[-,;:]?\s*tars\b", re.IGNORECASE)]
+WAKE_PATTERNS = [
+    re.compile(r"\bhey\s*[-,;:]?\s*tars\b", re.IGNORECASE),
+    re.compile(r"\bei\s*[-,;:]?\s*tars\b", re.IGNORECASE),
+    re.compile(r"\boi\s*[-,;:]?\s*tars\b", re.IGNORECASE),
+    re.compile(r"\bol[áa]\s*[-,;:]?\s*tars\b", re.IGNORECASE)
+]
 
 def _detect_wake(text: str):
     if not text:
@@ -387,11 +404,9 @@ async def post_command(payload: CommandRequest):
     if not cmd:
         raise HTTPException(status_code=400, detail="command is required")
 
-    # always store user echo
     user_log = await repo.write_log("user", f"> {cmd}")
     await manager.broadcast_json({"type": "log", "item": {"id": user_log.id, "ts": user_log.ts, "level": user_log.level, "text": user_log.text}})
 
-    # serve known via short cache without re-logging for 60s
     lines, level = _known_command_lines(cmd)
     if cmd.lower() in {"help","status","time"}:
         now = datetime.utcnow()
@@ -416,10 +431,12 @@ async def post_ai(input: AIRequest):
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
     mode = None
+    language = None
     if input.context and isinstance(input.context, dict):
         mode = input.context.get('mode')
+        language = input.context.get('language')
     try:
-        text = _call_openai_chat(prompt, mode=mode)
+        text = _call_openai_chat(prompt, mode=mode, language=language)
     except HTTPException:
         suggestions = _ai_suggest(prompt)
         for ln in suggestions:
@@ -445,9 +462,7 @@ async def automation_log(req: AutoLogRequest):
 @api_router.post("/gpt/session", response_model=GPTSessionResponse)
 async def gpt_session():
     session_id = _next_session_id()
-    # initialize file
     _session_path(session_id).write_text("[]", encoding='utf-8')
-    # log
     text = f"[GPT][{session_id}] SESSION START"
     li = await repo.write_log("info", text)
     await manager.broadcast_json({"type": "log", "item": {"id": li.id, "ts": li.ts, "level": li.level, "text": li.text}})
@@ -462,11 +477,9 @@ async def gpt_message(req: GPTMessageRequest):
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
 
-    # append user
     _append_session_log(session_id, 'user', prompt)
     await repo.write_log("info", f"[GPT][{session_id}] USER: {prompt}")
 
-    # assistant
     if AI_DISABLED:
         assistant = "Sure, I can help with that."
         audio_b64 = None
@@ -483,11 +496,19 @@ async def gpt_message(req: GPTMessageRequest):
 @api_router.post("/voice/transcribe", response_model=TranscribeResponse)
 async def voice_transcribe(file: UploadFile = File(...)):
     b = await file.read()
+    if not b or len(b) < 256:
+        raise HTTPException(status_code=400, detail="empty audio upload")
     try:
-        data = _call_openai_whisper(b, file.filename or 'audio.webm', file.content_type or 'audio/webm')
-        text = data.get('text', '').strip()
-        lang = data.get('language')
+        # accept webm/ogg/wav; do not force Content-Type
+        data = _call_openai_whisper(b, file.filename or 'audio', file.content_type or 'application/octet-stream')
+        text = (data.get('text') if isinstance(data, dict) else '').strip()
+        lang = data.get('language') if isinstance(data, dict) else None
     except HTTPException as e:
+        try:
+            li = await repo.write_log("error", f"[VOICE] transcribe error: {e.detail}")
+            await manager.broadcast_json({"type": "log", "item": {"id": li.id, "ts": li.ts, "level": li.level, "text": li.text}})
+        except Exception:
+            pass
         raise e
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"transcribe error: {e}")
@@ -504,6 +525,11 @@ async def voice_tts(text: str = Form(...), voice: str = Form('alloy'), fmt: str 
     try:
         audio_bytes = _call_openai_tts(text, voice=voice, fmt=fmt)
     except HTTPException as e:
+        try:
+            li = await repo.write_log("error", f"[VOICE] tts error: {e.detail}")
+            await manager.broadcast_json({"type": "log", "item": {"id": li.id, "ts": li.ts, "level": li.level, "text": li.text}})
+        except Exception:
+            pass
         raise e
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"tts error: {e}")
@@ -519,7 +545,7 @@ async def events_ws(websocket: WebSocket):
     except Exception:
         await manager.disconnect(websocket)
 
-# Home Assistant integration (optional real if configured)
+# Home Assistant integration (all entities)
 @api_router.get("/integrations/ha/entities")
 async def ha_entities():
     if not _ha_configured():
@@ -533,11 +559,11 @@ async def ha_entities():
         for st in data:
             try:
                 entity_id = st.get('entity_id','')
-                if not entity_id.startswith('light.'):
-                    continue
-                name = st.get('attributes',{}).get('friendly_name', entity_id)
+                attrs = st.get('attributes',{}) or {}
+                name = attrs.get('friendly_name', entity_id)
+                domain = entity_id.split('.')[0] if '.' in entity_id else 'unknown'
                 state = st.get('state','unknown')
-                items.append({"entity_id": entity_id, "name": name, "state": state})
+                items.append({"entity_id": entity_id, "domain": domain, "name": name, "state": state, "attributes": attrs})
             except Exception:
                 continue
         return {"configured": True, "items": items}
@@ -552,7 +578,10 @@ async def ha_service(call: HAServiceCall):
         return {"configured": False, "ok": False, "reason": "not_configured"}
     try:
         url = f"{HA_URL.rstrip('/')}/api/services/{call.domain}/{call.service}"
-        r = requests.post(url, headers={"Authorization": f"Bearer {HA_TOKEN}", "Content-Type": "application/json"}, json={"entity_id": call.entity_id}, timeout=10)
+        payload = {"entity_id": call.entity_id}
+        if call.data:
+            payload.update(call.data)
+        r = requests.post(url, headers={"Authorization": f"Bearer {HA_TOKEN}", "Content-Type": "application/json"}, json=payload, timeout=10)
         if r.status_code >= 400:
             raise HTTPException(status_code=502, detail=f"HA service error: {r.text}")
         return {"configured": True, "ok": True}
@@ -566,14 +595,12 @@ async def ha_service(call: HAServiceCall):
 async def tuya_devices():
     if not _tuya_configured():
         return {"configured": False, "items": []}
-    # If configured in the future, return real devices
     return {"configured": True, "items": []}
 
 @api_router.post("/integrations/tuya/service")
 async def tuya_service(call: TuyaServiceCall):
     if not _tuya_configured():
         return {"configured": False, "ok": False, "reason": "not_configured"}
-    # If configured, would call Tuya cloud; for now stub
     return {"configured": True, "ok": True}
 
 # Google Gmail stubs
@@ -590,7 +617,6 @@ async def gmail_messages():
 @api_router.post("/integrations/gmail/reply")
 async def gmail_reply(payload: Dict[str, Any]):
     cfg = _google_configured()
-    # simulate send
     return {"configured": cfg, "ok": True, "id": str(uuid.uuid4())}
 
 @api_router.post("/integrations/gmail/suggest-reply")
@@ -650,7 +676,6 @@ async def whatsapp_send(payload: Dict[str, Any]):
 async def get_device_state(device_id: str = ApiPath(...)):
     st = _device_states.get(device_id)
     if not st:
-        # initialize
         st = {"id": device_id, "name": device_id, "on": False}
         _device_states[device_id] = st
     return {"ok": True, "state": st}
@@ -681,7 +706,6 @@ async def sync_post(payload: Dict[str, Any]):
 # Reminders API
 @api_router.get("/reminders")
 async def reminders_list():
-    # use Mongo collection 'reminders'
     cursor = db.reminders.find({}).sort("created_at", -1)
     docs = await cursor.to_list(length=200)
     items = []
