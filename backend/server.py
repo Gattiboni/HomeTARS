@@ -303,7 +303,12 @@ def _call_openai_tts(text: str, voice: str = 'alloy', fmt: str = 'mp3') -> bytes
     return r.content
 
 # Wake word detection
-WAKE_PATTERNS = [re.compile(r"\bhey\s*[-,;:]?\s*tars\b", re.IGNORECASE), re.compile(r"\bei\s*[-,;:]?\s*tars\b", re.IGNORECASE)]
+WAKE_PATTERNS = [
+    re.compile(r"\bhey\s*[-,;:]?\s*tars\b", re.IGNORECASE),
+    re.compile(r"\bei\s*[-,;:]?\s*tars\b", re.IGNORECASE),
+    re.compile(r"\boi\s*[-,;:]?\s*tars\b", re.IGNORECASE),
+    re.compile(r"\bol[áa]\s*[-,;:]?\s*tars\b", re.IGNORECASE)
+]
 
 def _detect_wake(text: str):
     if not text:
