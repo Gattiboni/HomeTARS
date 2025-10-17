@@ -1,4 +1,4 @@
-// Phase 2..10 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
+// Phase 2..13 API client — uses REACT_APP_BACKEND_URL (do not hardcode)
 import { getFlags } from "./flags";
 
 const BASE = (
@@ -42,6 +42,12 @@ export const api = {
     return httpPost('/ai', payload);
   },
   automationLog: (text, meta) => httpPost('/automation/log', { text, meta }),
+  integrations: {
+    ha: {
+      entities: () => httpGet('/integrations/ha/entities'),
+      service: (domain, service, entity_id, data) => httpPost('/integrations/ha/service', { domain, service, entity_id, data }),
+    },
+  },
   gpt: {
     session: () => httpPost('/gpt/session', {}),
     message: (session_id, prompt, language) => httpPost('/gpt/message', { session_id, prompt, language }),
