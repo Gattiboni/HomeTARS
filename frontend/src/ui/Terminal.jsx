@@ -168,7 +168,12 @@ export default function Terminal() {
       if (!wsActive && !wasError) { const lines = Array.isArray(res?.lines) ? res.lines : []; const level = res?.level === "error" ? "error" : "system"; let delay = 0; lines.forEach((line) => { delay += 120; setTimeout(() => pushLog(line, level), delay); }); }
     } catch (e) { pushLogOnce("CORE LINK LOST", "error"); setOnline(false); scheduleRetry(); return; }
 
-    const modeCtx = detectAutomationMode(raw) ? { mode: 'automation' } : undefined;
+    // lightweight language detection for text
+    const txt = raw.trim();
+    const hasAccent = /[áéíóúàâêôãõç]/i.test(txt);
+    const hasPtWords = /\b(o|a|de|do|da|um|uma|por|para|com|ligar|desligar|temperatura)\b/i.test(txt);
+    const langHint = hasAccent || hasPtWords ? 'pt' : 'en';
+    const modeCtx = detectAutomationMode(raw) ? { mode: 'automation', language: langHint } : { language: langHint };
     showThinking();
     try {
       const t0 = performance.now(); const ai = await api.ai(raw.trim(), undefined, modeCtx); const t1 = performance.now(); hideThinking(); setMetrics((m) => ({ ...m, lastAiMs: Math.round(t1 - t0) }));
