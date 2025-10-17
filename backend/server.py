@@ -491,11 +491,11 @@ async def voice_transcribe(file: UploadFile = File(...)):
     if not b or len(b) < 256:
         raise HTTPException(status_code=400, detail="empty audio upload")
     try:
-        data = _call_openai_whisper(b, file.filename or 'audio.webm', file.content_type or 'audio/webm')
+        # accept webm/ogg/wav; do not force Content-Type
+        data = _call_openai_whisper(b, file.filename or 'audio', file.content_type or 'application/octet-stream')
         text = (data.get('text') if isinstance(data, dict) else '').strip()
         lang = data.get('language') if isinstance(data, dict) else None
     except HTTPException as e:
-        # surface diagnostics into logs
         try:
             li = await repo.write_log("error", f"[VOICE] transcribe error: {e.detail}")
             await manager.broadcast_json({"type": "log", "item": {"id": li.id, "ts": li.ts, "level": li.level, "text": li.text}})
