@@ -167,6 +167,7 @@ class HAServiceCall(BaseModel):
     domain: str
     service: str
     entity_id: str
+    data: Optional[Dict[str, Any]] = None
 
 # Tuya service
 class TuyaServiceCall(BaseModel):
@@ -519,7 +520,7 @@ async def events_ws(websocket: WebSocket):
     except Exception:
         await manager.disconnect(websocket)
 
-# Home Assistant integration (optional real if configured)
+# Home Assistant integration (all entities)
 @api_router.get("/integrations/ha/entities")
 async def ha_entities():
     if not _ha_configured():
@@ -533,11 +534,11 @@ async def ha_entities():
         for st in data:
             try:
                 entity_id = st.get('entity_id','')
-                if not entity_id.startswith('light.'):
-                    continue
-                name = st.get('attributes',{}).get('friendly_name', entity_id)
+                attrs = st.get('attributes',{}) or {}
+                name = attrs.get('friendly_name', entity_id)
+                domain = entity_id.split('.')[0] if '.' in entity_id else 'unknown'
                 state = st.get('state','unknown')
-                items.append({"entity_id": entity_id, "name": name, "state": state})
+                items.append({"entity_id": entity_id, "domain": domain, "name": name, "state": state, "attributes": attrs})
             except Exception:
                 continue
         return {"configured": True, "items": items}
@@ -552,7 +553,10 @@ async def ha_service(call: HAServiceCall):
         return {"configured": False, "ok": False, "reason": "not_configured"}
     try:
         url = f"{HA_URL.rstrip('/')}/api/services/{call.domain}/{call.service}"
-        r = requests.post(url, headers={"Authorization": f"Bearer {HA_TOKEN}", "Content-Type": "application/json"}, json={"entity_id": call.entity_id}, timeout=10)
+        payload = {"entity_id": call.entity_id}
+        if call.data:
+            payload.update(call.data)
+        r = requests.post(url, headers={"Authorization": f"Bearer {HA_TOKEN}", "Content-Type": "application/json"}, json=payload, timeout=10)
         if r.status_code >= 400:
             raise HTTPException(status_code=502, detail=f"HA service error: {r.text}")
         return {"configured": True, "ok": True}
