@@ -236,13 +236,19 @@ def _openai_headers():
     return {"Authorization": f"Bearer {OPENAI_API_KEY}"}
 
 
-def _call_openai_chat(prompt: str, mode: Optional[str] = None) -> str:
+def _call_openai_chat(prompt: str, mode: Optional[str] = None, language: Optional[str] = None) -> str:
     if AI_DISABLED:
         return "[AI DISABLED] Economy mode active."
     url = f"{OPENAI_BASE}/v1/chat/completions"
     system_content = BASE_PERSONA
     if mode == 'automation':
         system_content = BASE_PERSONA + "\n" + INTENT_INSTRUCTIONS
+    if language:
+        lang = str(language).lower()
+        if lang.startswith('pt'):
+            system_content += "\nAlways reply in Portuguese (pt-BR)."
+        elif lang.startswith('en'):
+            system_content += "\nAlways reply in English."
     payload = {"model": "gpt-4o-mini", "messages": [{"role": "system", "content": system_content}, {"role": "user", "content": prompt}], "temperature": 0.3, "max_tokens": 256}
     headers = {**_openai_headers(), "Content-Type": "application/json"}
     r = requests.post(url, json=payload, headers=headers, timeout=30)
