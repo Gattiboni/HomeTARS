@@ -41,13 +41,24 @@ if (-not $mongoProcess) {
     Show-Status "MongoDB already running" "OK" "Green"
 }
 
-# --- Step 2: Backend (FastAPI) ---
+# --- Step 2: Backend ---
 Show-Status "Spinning backend (FastAPI)" "INITIALIZING" "Yellow"
 Set-Location "C:\Users\Alan Gattiboni\Desktop\HomeTARS\backend"
-$backendArgs = @("/c", ".\venv\Scripts\activate && uvicorn server:app --reload")
-Start-Process -FilePath "cmd.exe" -ArgumentList $backendArgs -WindowStyle Minimized
+
+if (!(Test-Path ".\venv")) {
+    Show-Status "Creating virtual environment" "SETUP" "Yellow"
+    python -m venv venv
+    & .\venv\Scripts\activate
+    pip install -r ..\requirements.txt
+    Show-Status "Dependencies" "INSTALLED" "Green"
+}
+
+Start-Process -FilePath "cmd.exe" `
+    -ArgumentList "/c .\venv\Scripts\activate && uvicorn server:app --reload" `
+    -WindowStyle Minimized
 Start-Sleep -Seconds 10
 Show-Status "Backend link" "STABLE" "Green"
+
 
 # --- Step 3: Frontend (React) ---
 Show-Status "Deploying frontend (React)" "COMPILING" "Yellow"

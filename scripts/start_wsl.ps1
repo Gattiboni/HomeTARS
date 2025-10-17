@@ -125,7 +125,7 @@ try {
 }
 
 # Wait and verify HA listens on 8123 (retry up to 6 times)
-$maxTries = 6
+$maxTries = 20      # tenta por até ~40 s
 $ok = $false
 for ($i = 1; $i -le $maxTries; $i++) {
     Start-Sleep -Seconds 2
