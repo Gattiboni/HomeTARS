@@ -137,7 +137,8 @@ export default function Terminal() {
           dispatchIntent({ action: 'switch_mode', target: 'gpt' });
           pushLog(`GPT LINK OPENED: ${s.session_id}`, 'info');
         }
-        const mode = detectAutomationMode(finalText) ? { mode: 'automation' } : undefined;
+        const langHint = (data?.language || '').toLowerCase();
+        const mode = detectAutomationMode(finalText) ? { mode: 'automation', language: langHint } : { language: langHint };
         const t0 = performance.now(); const ai = await api.ai(finalText, undefined, mode); const t1 = performance.now(); hideThinking(); setMetrics((m) => ({ ...m, lastAiMs: Math.round(t1 - t0) }));
         if (!wsActive) { const lines = Array.isArray(ai?.lines) ? ai.lines : []; lines.forEach((line, idx) => setTimeout(() => pushLog(line, ai?.level || 'info'), 120 * (idx + 1))); }
         const intents = parseIntentsFromLines(ai?.lines || []); if (intents.length) intents.forEach(dispatchIntent); else { const h = inferIntentHeuristic(finalText); if (h) dispatchIntent(h); }
