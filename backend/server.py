@@ -431,10 +431,12 @@ async def post_ai(input: AIRequest):
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
     mode = None
+    language = None
     if input.context and isinstance(input.context, dict):
         mode = input.context.get('mode')
+        language = input.context.get('language')
     try:
-        text = _call_openai_chat(prompt, mode=mode)
+        text = _call_openai_chat(prompt, mode=mode, language=language)
     except HTTPException:
         suggestions = _ai_suggest(prompt)
         for ln in suggestions:
