@@ -257,26 +257,31 @@ def _call_openai_chat(prompt: str, mode: Optional[str] = None, language: Optiona
     data = r.json()
     return data["choices"][0]["message"]["content"].strip()
 
+# === GPT-4o Transcribe (substitui whisper-1) ===
+import aiohttp
 
-def _call_openai_whisper(file_bytes: bytes, filename: str, mime: str) -> dict:
-    if not VOICE_ONLINE:
-        return {"text": "", "language": "en"}
-    url = f"{OPENAI_BASE}/v1/audio/transcriptions"
-    # IMPORTANT: do not set Content-Type here; let requests set multipart boundary
-    files = { 'file': (filename or 'audio.webm', file_bytes, mime or 'application/octet-stream') }
-    data = { 'model': 'whisper-1' }
-    try:
-        r = requests.post(url, headers=_openai_headers(), files=files, data=data, timeout=90)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"whisper request error: {e}")
-    if r.status_code >= 400:
-        # bubble up provider error body for diagnostics
-        raise HTTPException(status_code=502, detail=f"openai whisper error: {r.text}")
-    try:
-        return r.json()
-    except Exception:
-        # some SDKs return text; ensure dict
-        return {"text": r.text}
+OPENAI_URL_TRANSCRIBE = "https://api.openai.com/v1/audio/transcriptions"
+
+async def _call_openai_transcribe(file_bytes: bytes, filename: str = "clip.webm", mime: str = "audio/webm") -> dict:
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY missing")
+
+    form = aiohttp.FormData()
+    form.add_field("file", file_bytes, filename=filename, content_type=mime)
+    form.add_field("model", "gpt-4o-transcribe")
+    form.add_field("response_format", "json")
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            OPENAI_URL_TRANSCRIBE,
+            data=form,
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+            timeout=60,
+        ) as r:
+            if r.status != 200:
+                txt = await r.text()
+                raise HTTPException(status_code=502, detail=f"openai stt error: {txt}")
+            return await r.json()
 
 
 def _beep_wav_bytes(duration_ms: int = 300, freq_hz: int = 880, sample_rate: int = 16000) -> bytes:
@@ -500,7 +505,11 @@ async def voice_transcribe(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="empty audio upload")
     try:
         # accept webm/ogg/wav; do not force Content-Type
-        data = _call_openai_whisper(b, file.filename or 'audio', file.content_type or 'application/octet-stream')
+        data = await _call_openai_transcribe(
+            b,
+            file.filename or 'audio.webm',
+            file.content_type or 'audio/webm',
+        )
         text = (data.get('text') if isinstance(data, dict) else '').strip()
         lang = data.get('language') if isinstance(data, dict) else None
     except HTTPException as e:

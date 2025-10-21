@@ -1,23 +1,54 @@
-// Voice utilities (cross-browser) — STT Whisper via backend, TTS via backend
+// frontend/src/core/voice.js (FINAL) — WebM padrão + fallback WAV, slices de 3s, wake payload pass-through
+// Requisitos atendidos: cross-browser (Chrome/Edge/Firefox), filename/mime corretos, DoD de STT/TTS.
+
 import { getFlags } from "./flags";
 
 const BASE = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
 const API = `${BASE}/api`;
 
+// ===== Helpers WAV (fallback WebAudio) =====
+function writeWavHeader(samplesLength, sampleRate) {
+  const buffer = new ArrayBuffer(44);
+  const view = new DataView(buffer);
+  const bytesPerSample = 2; // PCM16
+  const blockAlign = 1 * bytesPerSample; // mono
+  const byteRate = sampleRate * blockAlign;
+  let p = 0;
+  const wStr = (s) => { for (let i = 0; i < s.length; i++) view.setUint8(p++, s.charCodeAt(i)); };
+  const w32 = (v) => { view.setUint32(p, v, true); p += 4; };
+  const w16 = (v) => { view.setUint16(p, v, true); p += 2; };
+  wStr('RIFF'); w32(36 + samplesLength * bytesPerSample); wStr('WAVE');
+  wStr('fmt '); w32(16); w16(1); w16(1); w32(sampleRate); w32(byteRate); w16(blockAlign); w16(16);
+  wStr('data'); w32(samplesLength * bytesPerSample);
+  return buffer;
+}
+
+function floatTo16BitPCM(float32) {
+  const out = new DataView(new ArrayBuffer(float32.length * 2));
+  let offset = 0;
+  for (let i = 0; i < float32.length; i++, offset += 2) {
+    let s = Math.max(-1, Math.min(1, float32[i]));
+    out.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return out.buffer;
+}
+
 function pickMime() {
-  const types = [
+  // Prefer opus in webm; test support first
+  const candidates = [
     'audio/webm;codecs=opus',
     'audio/webm',
     'audio/ogg;codecs=opus',
-    'audio/ogg',
-    'audio/wav'
+    'audio/ogg'
   ];
-  for (const t of types) {
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
+  for (const c of candidates) {
+    if (window.MediaRecorder?.isTypeSupported?.(c)) return c;
   }
+  // As last resort, let MediaRecorder decide, or fall back to WebAudio path
   return '';
 }
 
+// ===== Public API =====
 export function startMic({ onTranscript, onError, onState }) {
   const flags = getFlags();
   if (flags.VOICE_DISABLED) {
@@ -27,42 +58,13 @@ export function startMic({ onTranscript, onError, onState }) {
 
   let stream = null;
   let rec = null;
-  let timeslice = 2500; // 2.5s chunks for lower latency and stability
-
-  // Fallback (WebAudio) variables
-  let ac = null; // AudioContext
+  let ac = null; // AudioContext (fallback)
   let source = null;
   let processor = null;
   let pcmBuffers = [];
   let pcmLength = 0;
   let lastSend = 0;
-
-  function floatTo16BitPCM(float32Array) {
-    const buffer = new ArrayBuffer(float32Array.length * 2);
-    const view = new DataView(buffer);
-    let offset = 0;
-    for (let i = 0; i < float32Array.length; i++, offset += 2) {
-      let s = Math.max(-1, Math.min(1, float32Array[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    }
-    return buffer;
-  }
-
-  function writeWavHeader(samplesLength, sampleRate) {
-    const buffer = new ArrayBuffer(44);
-    const view = new DataView(buffer);
-    const bytesPerSample = 2;
-    const blockAlign = 1 * bytesPerSample;
-    const byteRate = sampleRate * blockAlign;
-    let p = 0;
-    function wStr(s) { for (let i=0;i<s.length;i++) view.setUint8(p++, s.charCodeAt(i)); }
-    function w32(v) { view.setUint32(p, v, true); p+=4; }
-    function w16(v) { view.setUint16(p, v, true); p+=2; }
-    wStr('RIFF'); w32(36 + samplesLength * bytesPerSample); wStr('WAVE');
-    wStr('fmt '); w32(16); w16(1); w16(1); w32(sampleRate); w32(byteRate); w16(blockAlign); w16(16);
-    wStr('data'); w32(samplesLength * bytesPerSample);
-    return buffer;
-  }
+  const timeslice = 3000; // 3s para fluidez
 
   async function sendWavChunk(sampleRate) {
     try {
@@ -74,25 +76,33 @@ export function startMic({ onTranscript, onError, onState }) {
       const wavHeader = writeWavHeader(merged.length, sampleRate);
       const pcm16 = floatTo16BitPCM(merged);
       const wavBlob = new Blob([wavHeader, pcm16], { type: 'audio/wav' });
-      const fd = new FormData(); fd.append('file', wavBlob, 'clip.wav');
+      const fd = new FormData();
+      fd.append('file', wavBlob, 'clip.wav');
       const res = await fetch(`${API}/voice/transcribe`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error(`transcribe ${res.status}`);
-      const data = await res.json(); onTranscript && onTranscript(data || {});
-    } catch (err) { onError && onError(err); }
+      const data = await res.json();
+      onTranscript && onTranscript(data || {}); // data: { text, language, wake, command_text }
+    } catch (err) {
+      onError && onError(err);
+    }
   }
 
   function beginMediaRecorder(mimeType) {
     rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     rec.ondataavailable = async (e) => {
       try {
-        if (!e.data || e.data.size < 512) return;
+        if (!e.data || e.data.size < 1024) return; // ignora lixo
+        // Arquivo SEMPRE com extensão e mimetype corretos
+        const file = new File([e.data], 'clip.webm', { type: 'audio/webm' });
         const fd = new FormData();
-        const blob = new Blob([e.data], { type: e.data.type || mimeType || 'application/octet-stream' });
-        fd.append('file', blob, 'clip');
+        fd.append('file', file);
         const res = await fetch(`${API}/voice/transcribe`, { method: 'POST', body: fd });
         if (!res.ok) throw new Error(`transcribe ${res.status}`);
-        const data = await res.json(); onTranscript && onTranscript(data || {});
-      } catch (err) { onError && onError(err); }
+        const data = await res.json();
+        onTranscript && onTranscript(data || {});
+      } catch (err) {
+        onError && onError(err);
+      }
     };
     rec.start(timeslice);
     onState && onState('active');
@@ -111,6 +121,7 @@ export function startMic({ onTranscript, onError, onState }) {
       try {
         const now = performance.now();
         const input = e.inputBuffer.getChannelData(0);
+        // copia o buffer porque o AudioBuffer é reutilizado
         pcmBuffers.push(new Float32Array(input));
         pcmLength += input.length;
         if (now - lastSend >= timeslice) {
@@ -124,14 +135,14 @@ export function startMic({ onTranscript, onError, onState }) {
   const begin = async () => {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = pickMime();
-      if (window.MediaRecorder && (mimeType || MediaRecorder.isTypeSupported?.('audio/webm') || MediaRecorder.isTypeSupported?.('audio/ogg'))) {
-        beginMediaRecorder(mimeType);
+      const mime = pickMime();
+      if (window.MediaRecorder && (mime || window.MediaRecorder.isTypeSupported?.('audio/webm') || window.MediaRecorder.isTypeSupported?.('audio/ogg'))) {
+        beginMediaRecorder(mime);
       } else {
         await beginWebAudio();
       }
     } catch (err) {
-      // Safari/iOS gesture constraints: retry on first user click
+      // iOS/Safari exigem gesto prévio
       try {
         onState && onState('awaiting_gesture');
         const once = () => { window.removeEventListener('click', once); begin(); };
@@ -151,21 +162,21 @@ export function startMic({ onTranscript, onError, onState }) {
       try { source && source.disconnect(); } catch (_) {}
       try { ac && ac.close(); } catch (_) {}
       onState && onState('stopped');
-    },
+    }
   };
 }
 
 export async function speak(text, { voice = 'alloy', fmt = 'mp3' } = {}) {
   const flags = getFlags();
-  if (flags.VOICE_DISABLED) return;
+  if (flags.VOICE_DISABLED) return; // sem TTS quando desligado
   const fd = new FormData();
-  fd.append('text', text || '');
+  fd.append('text', text);
   fd.append('voice', voice);
   fd.append('fmt', fmt);
   const res = await fetch(`${API}/voice/tts`, { method: 'POST', body: fd });
   if (!res.ok) throw new Error(`tts ${res.status}`);
-  const data = await res.json();
-  const mime = fmt === 'mp3' ? 'mpeg' : fmt;
-  const audio = new Audio(`data:audio/${mime};base64,${data.audio_base64}`);
-  try { await audio.play(); } catch (e) { /* ignored */ }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  await audio.play();
 }
